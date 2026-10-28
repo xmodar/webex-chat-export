@@ -191,3 +191,43 @@ a chat message → **Inspect**. In the Console, paste
 folder because the files contain real messages. Run `npm run serve` and open
 `http://127.0.0.1:8765/` to try the scraper on them, or open
 `/test/scrape.test.html` to run the browser tests.
+
+## Releasing
+
+Bump `version` in [`extension/manifest.json`](extension/manifest.json), commit,
+then tag and push:
+
+```bash
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+The [ci workflow](.github/workflows/release.yml) runs the tests and lint,
+builds both packages, and attaches them to a GitHub release. It then publishes
+to each store whose secrets are set:
+
+- **Firefox Add-ons:** set `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`, from
+  [addons.mozilla.org → Developer Hub → Manage API Keys](https://addons.mozilla.org/developers/addon/api/key/).
+  The listing text comes from
+  [`store/amo-metadata.json`](store/amo-metadata.json).
+- **Chrome Web Store:** the first version has to be uploaded by hand in the
+  [developer dashboard](https://chrome.google.com/webstore/devconsole). That
+  creates the item ID. After that, set `CWS_EXTENSION_ID`, `CWS_CLIENT_ID`,
+  `CWS_CLIENT_SECRET` and `CWS_REFRESH_TOKEN` (see the
+  [chrome-webstore-upload key guide](https://github.com/fregante/chrome-webstore-upload-keys)).
+
+Store text, permission justifications and screenshots are in
+[`store/`](store/). The screenshots are rendered from
+[`store/screenshots.html`](store/screenshots.html).
+
+## Privacy
+
+The extension collects nothing and makes no network requests. Chats stay on
+your computer; see [PRIVACY.md](PRIVACY.md).
+
+## License
+
+[MIT](LICENSE) © 2026 Modar M. Alfadly. The bundled
+[webextension-polyfill](https://github.com/mozilla/webextension-polyfill) is
+under [MPL-2.0](extension/vendor/browser-polyfill.LICENSE).
+
+Not affiliated with Cisco or Webex.

@@ -3,29 +3,64 @@
   "name": "Webex Chat Export",
   "version": "1.1.0",
   "description": "Export a Webex meeting chat (Everyone and direct chats, with markdown, replies and quotes) to one Excel sheet or JSON.",
+  "homepage_url": "https://github.com/xmodar/webex-chat-export",
   "browser_specific_settings": {
     "gecko": {
       "id": "webex-chat-export@xmodar",
       "strict_min_version": "115.0",
-      "data_collection_permissions": { "required": ["none"] }
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
     }
   },
-  "permissions": ["scripting", "downloads", "storage", "activeTab"],
-  "host_permissions": ["*://*.webex.com/*"],
+  "permissions": [
+    "scripting",
+    "downloads",
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "*://*.webex.com/*"
+  ],
   "background": {
-    "scripts": ["lib/xlsx.js", "lib/merge.js", "lib/export.js", "background.js"],
+    "scripts": [
+      "lib/xlsx.js",
+      "lib/merge.js",
+      "lib/export.js",
+      "background.js"
+    ],
     "service_worker": "background.js"
   },
-  "content_scripts": [{
-    "matches": ["https://web.webex.com/*"],
-    "all_frames": true,
-    "run_at": "document_idle",
-    "js": ["vendor/browser-polyfill.min.js", "lib/markdown.js", "lib/merge.js", "lib/scrape.js", "capture.js"]
-  }],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://web.webex.com/*"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle",
+      "js": [
+        "vendor/browser-polyfill.min.js",
+        "lib/markdown.js",
+        "lib/merge.js",
+        "lib/scrape.js",
+        "capture.js"
+      ]
+    }
+  ],
   "action": {
     "default_title": "Export Webex chat",
     "default_popup": "popup.html",
-    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png" }
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
   },
-  "icons": { "48": "icons/icon-48.png", "96": "icons/icon-96.png", "128": "icons/icon-128.png" }
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  }
 }
