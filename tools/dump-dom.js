@@ -50,6 +50,12 @@
     return s;
   }
 
+  if (location.hostname !== "web.webex.com") {
+    console.error("✘ Wrong frame (" + location.hostname + "). Right-click a chat message → Inspect, " +
+      "then paste this again in the Console.");
+    return;
+  }
+
   window.dump = function (label) {
     var html = "<!doctype html><html><head><meta charset=\"utf-8\"><title>" + escText(label || "dump") +
       "</title></head>" + ser(document.body) + "</html>";

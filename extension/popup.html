@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Webex Chat Export</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <h1>Webex Chat Export</h1>
+
+  <fieldset class="format">
+    <legend>Format</legend>
+    <label><input type="radio" name="format" value="xlsx" checked> Excel (.xlsx)</label>
+    <label><input type="radio" name="format" value="json"> JSON</label>
+  </fieldset>
+
+  <label class="check"><input type="checkbox" id="includeDirect" checked> Include direct (private) chats</label>
+
+  <details>
+    <summary>Options</summary>
+    <label class="field">Rename “You” to
+      <input type="text" id="myName" placeholder="leave empty to keep “You”">
+    </label>
+    <label class="field">Time zone (for the date)
+      <input type="text" id="timezone" placeholder="Asia/Riyadh">
+    </label>
+    <label class="check"><input type="checkbox" id="rtl" checked> Right-to-left sheet</label>
+  </details>
+
+  <button id="export" type="button">Export chat</button>
+  <p id="status" role="status" aria-live="polite"></p>
+  <p class="hint">Keep this tab on the meeting while it runs: the chat panel is scrolled and each direct chat is opened in turn.</p>
+
+  <script src="popup.js"></script>
+</body>
+</html>

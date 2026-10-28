@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>scrape tests</title>
+  <style>body { font: 14px system-ui; } .pass { color: green; } .fail { color: #b00; }</style>
+</head>
+<body>
+<!--
+  Browser tests for the markdown converter and scraper, on a synthetic copy
+  of the Webex chat markup (structure taken from real snapshots, names made up).
+  Run:  node tools/serve.js   then open http://127.0.0.1:8765/test/scrape.test.html
+-->
+<pre id="results">running…</pre>
+
+<div id="fixture" hidden>
+  <mdc-tablist>
+    <mdc-tab id="everyone-tab" aria-selected="true" tab-id="everyone">Everyone</mdc-tab>
+    <mdc-tab id="direct-tab" aria-selected="false" tab-id="direct">Direct</mdc-tab>
+  </mdc-tablist>
+  <div role="tabpanel" id="everyone-tabpanel">
+    <div class="space-body"><div class="activity-list" id="activity-list">
+      <mdc-list class="activity-list-listcomponent" role="list">
+        <template shadowrootmode="open"><slot></slot></template>
+
+        <mdc-listitem id="act-1" class="activity activity-list-item" aria-label="Message from Sara Ali, Unverified, 10:16 AM, hello">
+          <template shadowrootmode="open"><slot name="content"></slot></template>
+          <div slot="content"><div class="activity-content">
+            <div class="activity-item-sender"><span class="sender-name">Sara Ali</span>
+              <mdc-toggletip>Webex can't verify Sara Ali's identity.</mdc-toggletip>
+              <span class="sent-date">10:16 AM</span></div>
+            <mdc-buttongroup data-test="activity-toolbar"><mdc-button data-test="activity-toolbar-reply"></mdc-button></mdc-buttongroup>
+            <div class="activity-item-message" data-test="activity-item-message"><p><strong>Hello</strong> <em>all</em>, see <a href="https://example.com/x">the doc</a> and <a href="http://modar.me">modar.me</a></p></div>
+            <div class="reaction-summary" data-test="reaction-summary"><mdc-buttongroup>
+              <mdc-button aria-label="2 Like reaction. Add this reaction" data-count="2" data-test="reaction-thumbsup"><span>2</span></mdc-button>
+            </mdc-buttongroup></div>
+          </div></div>
+        </mdc-listitem>
+
+        <mdc-listitem id="act-2" class="activity activity-list-item activity--additional" aria-label="Message from Sara Ali, Unverified, 10:17 AM, code">
+          <div slot="content"><div class="activity-content">
+            <div class="activity-item-message" data-test="activity-item-message"><div class="wrap"><div class="tools">
+              <mdc-button aria-label="Copy" data-test="copy-button" data-clipboard-text="import numpy as np&#10;x = 1"></mdc-button></div>
+              <pre><code class="language-python"><span class="linenumber react-syntax-highlighter-line-number">1</span><span>import numpy as np</span>
+<span class="linenumber react-syntax-highlighter-line-number">2</span><span>x = 1</span></code></pre></div></div>
+          </div></div>
+        </mdc-listitem>
+
+        <mdc-listitem id="act-3" class="activity activity-list-item activity--reply" aria-label="Message from Omar, gmail.com, 10:20 AM, thanks">
+          <div slot="content"><div class="activity-content">
+            <div class="activity-item-sender"><span class="sender-name">Omar</span><span class="sent-date">10:20 AM</span></div>
+            <div class="activity-item-message" data-test="activity-item-message">thanks <code>x</code></div>
+          </div></div>
+        </mdc-listitem>
+
+        <mdc-listitem id="act-4" class="activity-list-item activity-item" data-test="system-message" aria-label="Omar deleted their own message. 10:21 AM">
+          <mdc-text slot="content"><span data-test="activity-item"><span class="value">Omar deleted their own message.<span class="system-message-date"> 10:21 AM</span></span></span></mdc-text>
+        </mdc-listitem>
+
+        <mdc-listitem id="act-5" class="activity activity-list-item" aria-label="Message from You, Unverified, 1:05 PM, Quoted">
+          <div slot="content"><div class="activity-content">
+            <div class="activity-item-sender"><span class="sender-name is-my-message">You</span><span class="sent-date is-my-message-date">1:05 PM</span></div>
+            <div class="activity-item-message" data-test="activity-item-message"><blockquote class="messageQuote"><mdc-text>Quoted from Omar</mdc-text><mdc-linkbutton>Go to message</mdc-linkbutton><br><ul><li>one</li><li>two<ul><li>nested</li></ul></li></ul></blockquote>see above<br>second line</div>
+          </div></div>
+        </mdc-listitem>
+
+        <mdc-listitem id="act-6" class="activity activity-list-item" aria-label="Message from Lee, Jr., Unverified, 1:06 PM, hi">
+          <div slot="content"><div class="activity-content">
+            <div class="activity-item-message" data-test="activity-item-message"><h2>Title</h2><ol><li>a</li><li>b</li></ol><blockquote><p>plain quote</p></blockquote></div>
+          </div></div>
+        </mdc-listitem>
+      </mdc-list>
+    </div></div>
+    <div class="ql-editor" aria-label="Write a message to Demo Course"></div>
+  </div>
+</div>
+
+<script src="/extension/lib/markdown.js"></script>
+<script src="/extension/lib/scrape.js"></script>
+<script>
+(async function () {
+  var lines = [], failed = 0;
+  function eq(name, got, want) {
+    var ok = JSON.stringify(got) === JSON.stringify(want);
+    if (!ok) failed++;
+    lines.push((ok ? "✔ " : "✘ ") + name + (ok ? "" : "\n    got:  " + JSON.stringify(got) + "\n    want: " + JSON.stringify(want)));
+  }
+
+  var r = await WebexChatScraper.run({ includeDirect: false });
+  var m = r.conversations[0].messages;
+
+  eq("meeting name", r.meeting, "Demo Course");
+  eq("count", m.length, 6);
+  eq("kinds", m.map(function (x) { return x.kind; }), ["message", "message", "reply", "system", "message", "message"]);
+  eq("bold/italic/links", m[0].text, "**Hello** _all_, see [the doc](https://example.com/x) and modar.me");
+  eq("toggletip text excluded", /verify/.test(m[0].plain), false);
+  eq("reactions", m[0].reactions, [{ name: "Like", count: 2 }]);
+  eq("time 24h", [m[0].time, m[4].time], ["10:16", "13:05"]);
+  eq("additional item keeps sender from label", m[1].user, "Sara Ali");
+  eq("code block from clipboard text", m[1].text, "```python\nimport numpy as np\nx = 1\n```");
+  eq("reply links to thread parent", m[2].replyTo, "act-2");
+  eq("inline code", m[2].text, "thanks `x`");
+  eq("system message", [m[3].text, m[3].time], ["Omar deleted their own message.", "10:21"]);
+  eq("quote", m[4].quote, { user: "Omar", text: "- one\n- two\n  - nested" });
+  eq("text after quote", m[4].text, "see above\nsecond line");
+  eq("mine", m[4].mine, true);
+  eq("comma in name", m[5].user, "Lee, Jr.");
+  eq("heading/ordered list/blockquote", m[5].text, "## Title\n\n1. a\n2. b\n\n> plain quote");
+
+  document.getElementById("results").textContent = lines.join("\n") + "\n\n" + (failed ? failed + " FAILED" : "all passed");
+  document.getElementById("results").className = failed ? "fail" : "pass";
+  window.testResult = { failed: failed, lines: lines };
+})().catch(function (e) {
+  document.getElementById("results").textContent = "error: " + e.stack;
+  window.testResult = { failed: -1, error: String(e) };
+});
+</script>
+</body>
+</html>
