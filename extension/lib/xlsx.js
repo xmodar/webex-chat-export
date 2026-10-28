@@ -30,7 +30,7 @@
     function u32(v) { return [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255]; }
 
     files.forEach(function (f) {
-      var name = enc.encode(f.name), data = enc.encode(f.data), crc = crc32(data);
+      var name = enc.encode(f.name), data = typeof f.data === "string" ? enc.encode(f.data) : f.data, crc = crc32(data);
       // local file header; bit 11 (0x0800) marks the name as UTF-8
       var local = [].concat(u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(0),
         u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0));
@@ -152,7 +152,7 @@
     ]);
   }
 
-  var api = { buildXlsx: buildXlsx, colName: colName };
+  var api = { buildXlsx: buildXlsx, colName: colName, zip: zip };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.WebexXlsx = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

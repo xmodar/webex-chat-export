@@ -1,0 +1,14 @@
+{
+  "name": "webex-chat-export",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser extension that exports a Webex meeting chat to one Excel sheet or JSON",
+  "scripts": {
+    "build": "node tools/build.js",
+    "test": "node test/export.test.js",
+    "serve": "node tools/serve.js",
+    "lint": "node tools/build.js && npx --yes web-ext@8 lint --source-dir dist/firefox",
+    "firefox": "node tools/build.js && npx --yes web-ext@8 run --source-dir dist/firefox --url https://web.webex.com",
+    "icons": "node tools/make-icons.js"
+  }
+}
