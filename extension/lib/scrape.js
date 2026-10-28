@@ -132,22 +132,9 @@
     return panel.querySelector(".space-body") || $(".space-body", panel);
   }
 
-  // Merge the ids currently in the DOM into the running order. Webex may
-  // virtualize the list, so each pass only sees a window of it.
-  function merge(order, seen, items, parse) {
-    var prev = -1;
-    items.forEach(function (it) {
-      if (seen[it.id] !== undefined) {
-        prev = order.indexOf(it.id);
-        seen[it.id] = parse(it) || seen[it.id];
-        return;
-      }
-      var msg = parse(it);
-      if (!msg) return;
-      seen[it.id] = msg;
-      order.splice(prev + 1, 0, it.id);
-      prev++;
-    });
+  // Webex may virtualize the list, so each pass only sees a window of it
+  function merge(order, seen, items) {
+    WebexMerge.mergeOrdered(order, seen, items.map(parseMessage));
   }
 
   async function readConversation(panel) {
@@ -165,21 +152,41 @@
       }
       // then walk down one screen at a time, collecting as we go
       for (var guard = 0; guard < 2000; guard++) {
-        merge(order, seen, listItems(panel), parseMessage);
+        merge(order, seen, listItems(panel));
         if (box.scrollTop + box.clientHeight >= box.scrollHeight - 2) break;
         box.scrollTop += Math.max(100, box.clientHeight * 0.8);
         await sleep(120);
       }
     }
-    merge(order, seen, listItems(panel), parseMessage);
+    merge(order, seen, listItems(panel));
+    return WebexMerge.linkReplies(order.map(function (id) { return seen[id]; }));
+  }
 
-    // replies are rendered right under the message that started the thread
-    var msgs = order.map(function (id) { return seen[id]; }), parent = null;
-    msgs.forEach(function (m) {
-      if (m.kind === "message") parent = m;
-      else if (m.kind === "reply" && parent) m.replyTo = parent.id;
-    });
-    return msgs;
+  /* What is on screen right now, without clicking or scrolling anything:
+     the Everyone list and/or the open direct chat. Used by the live capture. */
+  function readVisible() {
+    var out = [], everyone = $("#everyone-tabpanel"), direct = $("#direct-tabpanel");
+    if (everyone && listItems(everyone).length) {
+      out.push({ name: "Everyone", kind: "everyone", participant: "",
+                 messages: WebexMerge.linkReplies(listItems(everyone).map(parseMessage).filter(Boolean)) });
+    }
+    if (direct && $("#direct-chat-back-button") && listItems(direct).length) {
+      var who = text(direct.querySelector(".direct-chat-header mdc-text"));
+      if (who) {
+        out.push({ name: "Direct: " + who, kind: "direct", participant: who,
+                   messages: WebexMerge.linkReplies(listItems(direct).map(parseMessage).filter(Boolean)) });
+      }
+    }
+    return { meeting: meetingName(), self: selfFromList(), conversations: out };
+  }
+
+  // cheap fingerprint of the rendered lists, to skip parsing when nothing changed
+  function visibleSignature() {
+    return ["#everyone-tabpanel", "#direct-tabpanel"].map(function (sel) {
+      var p = $(sel), items = p ? listItems(p) : [];
+      return items.length + ":" + (items[0] ? items[0].id : "") + ":" + (items.length ? items[items.length - 1].id : "") +
+        ":" + (p ? $$('[data-test="reaction-summary"] [data-count]', p).length : 0);
+    }).join("|") + "|" + !!$('[data-test="participant-list-item"]');
   }
 
   /* ---------- driving the chat panel ----------------------------------- */
@@ -295,5 +302,8 @@
     return { found: true, meeting: meeting, self: self, conversations: conversations };
   }
 
-  root.WebexChatScraper = { run: run, parseMessage: parseMessage, readConversation: readConversation, selfFromList: selfFromList };
+  root.WebexChatScraper = {
+    run: run, parseMessage: parseMessage, readConversation: readConversation, selfFromList: selfFromList,
+    readVisible: readVisible, visibleSignature: visibleSignature
+  };
 })(typeof globalThis !== "undefined" ? globalThis : this);

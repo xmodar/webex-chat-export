@@ -9,12 +9,12 @@
 
   var Xlsx = root.WebexXlsx || (typeof require === "function" ? require("./xlsx.js") : null);
 
-  function today(tz) {
+  function today(tz, when) {
     try {
       return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" })
-        .format(new Date()); // en-CA formats as YYYY-MM-DD
+        .format(when ? new Date(when) : new Date()); // en-CA formats as YYYY-MM-DD
     } catch (e) {
-      return new Date().toISOString().slice(0, 10);
+      return (when ? new Date(when) : new Date()).toISOString().slice(0, 10);
     }
   }
 
@@ -43,7 +43,7 @@
   function normalize(result, opts) {
     opts = opts || {};
     var timezone = opts.timezone || localZone();
-    var date = opts.date || today(timezone);
+    var date = opts.date || today(timezone, opts.when); // when: the meeting time, for a capture exported later
     var me = (opts.myName || "").trim() || (result.self || "").trim();
     function who(u) { return me && u === "You" ? me : u; }
 
@@ -58,7 +58,6 @@
           id: m.id,
           conversation: convName,
           kind: m.kind,
-          timestamp: m.time ? date + " " + m.time : "",
           time: m.time,
           user: who(m.user),
           text: m.text,
@@ -86,8 +85,9 @@
     return { date: date, timezone: timezone, self: me, messages: out, who: who };
   }
 
+  // the sheet is named after the date, so the first column only holds the time
   var COLUMNS = [
-    { key: "timestamp", header: "timestamp", width: 18 },
+    { key: "timestamp", header: "timestamp", width: 10 },
     { key: "user", header: "user", width: 26 },
     { key: "text", header: "text", width: 80 },
     { key: "conversation", header: "conversation", width: 22 },
@@ -103,7 +103,7 @@
 
   function toRow(m) {
     return {
-      timestamp: m.timestamp, user: m.user, text: m.text, conversation: m.conversation, no: m.no, kind: m.kind,
+      timestamp: m.time, user: m.user, text: m.text, conversation: m.conversation, no: m.no, kind: m.kind,
       reply_to: m.replyTo ? m.replyTo.no : "", reply_to_user: m.replyTo ? m.replyTo.user : "",
       quote_of: m.quote && m.quote.no ? m.quote.no : "", quoted_user: m.quote ? m.quote.user : "",
       quoted_text: m.quote ? m.quote.text : "",
@@ -111,9 +111,9 @@
     };
   }
 
-  function buildXlsxFile(result, opts) {
+  async function buildXlsxFile(result, opts) {
     var n = normalize(result, opts);
-    var bytes = Xlsx.buildXlsx({
+    var bytes = await Xlsx.buildXlsx({
       sheetName: n.date,
       rtl: opts && (opts.direction === "rtl" || opts.direction === "ltr")
         ? opts.direction === "rtl" : mostlyRtl(n.messages),
@@ -127,8 +127,27 @@
              bytes: bytes, count: n.messages.length };
   }
 
+  /* Compact JSON: messages nested under their conversation (so the
+     conversation name isn't repeated), times without the date (it's given
+     once at the top), and fields left out when they hold their default:
+     type "message", no reply, no quote, no reactions. */
+  function compactMessage(m) {
+    var o = { no: m.no, time: m.time, user: m.user, text: m.text };
+    if (m.kind !== "message") o.type = m.kind;
+    if (m.replyTo) o.replyTo = m.replyTo.no;
+    if (m.quote) {
+      o.quote = { user: m.quote.user, text: m.quote.text };
+      if (m.quote.no) o.quote.no = m.quote.no;
+    }
+    if (m.reactions.length) {
+      o.reactions = {};
+      m.reactions.forEach(function (r) { o.reactions[r.name] = r.count; });
+    }
+    return o;
+  }
+
   function buildJsonFile(result, opts) {
-    var n = normalize(result, opts);
+    var n = normalize(result, opts), at = 0;
     var doc = {
       meeting: result.meeting || "",
       date: n.date,
@@ -136,13 +155,14 @@
       you: n.self || "You",
       exportedAt: new Date().toISOString(),
       conversations: result.conversations.map(function (c) {
-        var name = c.kind === "direct" ? "Direct: " + n.who(c.participant) : c.name;
-        return { name: name, kind: c.kind, participant: n.who(c.participant), messages: c.messages.length };
-      }),
-      messages: n.messages
+        var conv = { name: c.kind === "direct" ? "Direct: " + n.who(c.participant) : c.name, kind: c.kind };
+        if (c.participant) conv.participant = n.who(c.participant);
+        conv.messages = n.messages.slice(at, at += c.messages.length).map(compactMessage);
+        return conv;
+      })
     };
-    var bytes = new TextEncoder().encode(JSON.stringify(doc, null, 2));
-    return { name: "chat-" + n.date + ".json", type: "application/json", bytes: bytes, count: n.messages.length };
+    var bytes = new TextEncoder().encode(JSON.stringify(doc));
+    return Promise.resolve({ name: "chat-" + n.date + ".json", type: "application/json", bytes: bytes, count: n.messages.length });
   }
 
   var api = { normalize: normalize, buildXlsxFile: buildXlsxFile, buildJsonFile: buildJsonFile, mostlyRtl: mostlyRtl, COLUMNS: COLUMNS };

@@ -1,8 +1,5 @@
-/* global browser */
+/* global browser, WebexMerge, ExportOptions */
 var ORIGINS = ["*://*.webex.com/*"];
-var LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-// myName / timezone left empty mean "detect": the participants list and this computer's zone
-var DEFAULTS = { format: "xlsx", includeDirect: true, myName: "", timezone: "", direction: "auto" };
 
 var $ = function (id) { return document.getElementById(id); };
 var btn = $("export"), out = $("status");
@@ -14,44 +11,39 @@ function show(s) {
   btn.disabled = s.state === "running";
 }
 
-function read() {
-  return {
-    format: document.querySelector('input[name="format"]:checked').value,
-    includeDirect: $("includeDirect").checked,
-    myName: $("myName").value.trim(),
-    timezone: $("timezone").value.trim(),
-    direction: $("direction").value
-  };
-}
-
-browser.storage.local.get(DEFAULTS).then(function (o) {
-  document.querySelector('input[name="format"][value="' + o.format + '"]').checked = true;
-  $("includeDirect").checked = o.includeDirect;
-  $("myName").value = o.myName;
-  $("timezone").value = o.timezone;
-  $("direction").value = o.direction;
-});
-$("timezone").placeholder = LOCAL_TZ;
-
-function validZone(tz) {
-  try { new Intl.DateTimeFormat("en", { timeZone: tz }); return true; } catch (e) { return false; }
-}
+ExportOptions.load();
 
 // show an export that is still running (or just finished) from an earlier popup
 browser.storage.session.get("status").then(function (o) {
   if (o.status && Date.now() - o.status.at < 10 * 60 * 1000) show(o.status);
 });
 
+// chats captured from meetings whose tab closed before they were exported
+browser.storage.local.get("captures").then(function (o) {
+  var all = o.captures || {};
+  var recs = Object.keys(all).map(function (k) { return all[k]; })
+    .filter(function (r) { return r.reminded && WebexMerge.count(r) > (r.exportedCount || 0); })
+    .sort(function (a, b) { return b.startedAt - a.startedAt; });
+  if (!recs.length) return;
+  $("unsaved").hidden = false;
+  $("unsavedList").replaceChildren.apply($("unsavedList"), recs.map(function (r) {
+    var li = document.createElement("li"), a = document.createElement("a");
+    a.href = browser.runtime.getURL("reminder.html?session=" + encodeURIComponent(r.session));
+    a.target = "_blank";
+    a.textContent = (r.meeting || "Webex meeting") + " · " + new Date(r.startedAt).toLocaleString() +
+      " · " + WebexMerge.count(r) + " messages";
+    li.appendChild(a);
+    return li;
+  }));
+});
+
 browser.runtime.onMessage.addListener(function (msg) {
-  if (msg && msg.type === "status") show(msg.status);
+  if (msg && msg.type === "status" && !msg.status.session) show(msg.status);
 });
 
 btn.addEventListener("click", async function () {
-  var opts = read();
-  if (opts.timezone && !validZone(opts.timezone)) {
-    return show({ state: "error", text: "Unknown time zone “" + opts.timezone + "”. Use a name like Europe/Berlin." });
-  }
-  browser.storage.local.set(opts);
+  var opts = ExportOptions.read();
+  if (opts.error) return show({ state: "error", text: opts.error });
   // Firefox lets people withhold host access; ask while we have the click
   var ok = await browser.permissions.contains({ origins: ORIGINS }) || await browser.permissions.request({ origins: ORIGINS });
   if (!ok) return show({ state: "error", text: "Allow access to webex.com to read the chat." });

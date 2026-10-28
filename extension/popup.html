@@ -33,11 +33,18 @@
     </label>
   </details>
 
-  <button id="export" type="button">Export chat</button>
+  <button id="export" type="button">Export chat…</button>
   <p id="status" role="status" aria-live="polite"></p>
-  <p class="hint">Keep this tab on the meeting while it runs: the chat panel is scrolled and each direct chat is opened in turn.</p>
+  <p class="hint">Keep this tab on the meeting while it runs: the chat panel is scrolled and each direct chat is opened in turn. You'll be asked where to save the file.</p>
+
+  <section id="unsaved" hidden>
+    <h2>Not exported yet</h2>
+    <ul id="unsavedList"></ul>
+  </section>
 
   <script src="vendor/browser-polyfill.min.js"></script>
+  <script src="lib/merge.js"></script>
+  <script src="options.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

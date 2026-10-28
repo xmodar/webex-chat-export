@@ -50,3 +50,19 @@ button:disabled { opacity: .6; cursor: progress; }
 #status.error { color: var(--error); }
 #status.done { color: var(--ok); }
 .hint { margin: 0; color: var(--muted); font-size: 11.5px; }
+.field select option { background: var(--bg); color: var(--fg); }
+h2 { font-size: 13px; margin: 14px 0 4px; }
+#unsavedList { margin: 0; padding-left: 18px; }
+#unsavedList a { color: var(--accent); }
+
+/* reminder window */
+body.page { width: auto; max-width: 440px; margin: 0 auto; padding: 18px 20px; }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 10px 0 8px; }
+.card p { margin: 2px 0; }
+.card ul { margin: 6px 0 2px; padding-left: 18px; }
+.meeting { font-weight: 600; }
+.muted { color: var(--muted); }
+.page .hint { margin-bottom: 12px; }
+.row { display: flex; gap: 8px; margin-top: 8px; }
+button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--line); font-weight: 500; }
+button.danger { color: var(--error); }

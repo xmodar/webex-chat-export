@@ -15,7 +15,9 @@ What it does that the console script couldn't:
 | Only what was rendered was saved. | Scrolls each conversation to the top until no older messages load, then walks down, collecting messages as it goes. |
 
 It also keeps reactions and system lines (for example "X deleted their own
-message"), and opens the chat panel if it is closed.
+message"), and opens the chat panel if it is closed. If you close the meeting
+tab without exporting, it offers to export the chat it saw during the meeting
+(see [Reminder](#reminder-when-a-meeting-tab-closes)).
 
 ## Install
 
@@ -40,11 +42,13 @@ add-on already loaded.
 ## Use
 
 1. Join the meeting **in the browser**, in the web app on `*.webex.com`.
-2. Click the toolbar icon → choose **Excel** or **JSON** → **Export chat**.
+2. Click the toolbar icon → choose **Excel** or **JSON** → **Export chat…**.
 3. Keep the meeting tab in front while the export runs. The extension scrolls
    the chat and opens each direct chat, then puts the chat back on the tab it
-   was showing. The file goes to your Downloads folder as `chat-YYYY-MM-DD.xlsx`
-   or `.json`.
+   was showing.
+4. Choose where to save the file. The suggested name is `chat-YYYY-MM-DD.xlsx`
+   or `.json`. If you cancel the dialog, nothing is saved and the chat still
+   counts as not exported.
 
 The first time, Firefox may ask to allow access to `webex.com`.
 
@@ -61,16 +65,32 @@ Options in the popup (all optional):
   Arabic, Hebrew, Persian or Urdu), left-to-right, or right-to-left.
 - **Include direct (private) chats.**
 
+### Reminder when a meeting tab closes
+
+Once a meeting tab is closed, its chat is gone, so the extension saves what the
+chat panel shows while the meeting runs. Every few seconds it reads the
+Everyone list and any direct chat you have open. It doesn't click or scroll
+anything. If the tab closes, you leave the meeting, or the browser quits while
+messages are still unexported, a window opens with the same format and
+options. From there you can **Export…**, choose **Not now** (the chat then
+appears under **Not exported yet** in the popup), or **Discard** it.
+
+What the reminder can export is what the chat panel showed while the meeting
+ran: direct chats you never opened aren't included. A normal export opens
+every direct chat, and it also marks the meeting as exported. Captured chats
+are kept only on this computer, in the extension's storage, and are deleted
+after 14 days.
+
 ## Output
 
 ### Excel: one sheet named after the date
 
-The first three columns match the old script, so existing workbooks and tools
-keep working.
+The sheet is named after the meeting's date, so `timestamp` holds only the
+time. The first three columns keep the old script's names and order.
 
 | Column | Contents |
 | --- | --- |
-| `timestamp` | `YYYY-MM-DD HH:mm`: today's date in the chosen time zone plus the message time |
+| `timestamp` | The message time, `HH:mm` (24-hour) |
 | `user` | The sender; "You" becomes your detected or chosen name |
 | `text` | The message as markdown, with any quote moved to the `quoted_*` columns |
 | `conversation` | `Everyone` or `Direct: <name>` |
@@ -82,6 +102,12 @@ keep working.
 
 ### JSON
 
+The JSON is written on a single line. Messages are nested under their
+conversation, and the date appears once at the top. Fields are left out when
+they have their default value: `type` is assumed to be `message`, and there is
+no `replyTo`, `quote` or `reactions` unless the message has one. Formatted for
+reading:
+
 ```jsonc
 {
   "meeting": "Course title",
@@ -89,22 +115,37 @@ keep working.
   "timezone": "Europe/Berlin",
   "you": "Dana Host",
   "exportedAt": "2026-10-28T11:40:00.000Z",
-  "conversations": [{ "name": "Everyone", "kind": "everyone", "participant": "", "messages": 123 }],
-  "messages": [{
-    "no": 121, "id": "act-…", "conversation": "Everyone", "kind": "reply",
-    "timestamp": "2026-10-28 14:23", "time": "14:23", "user": "Dana Host",
-    "text": "markdown", "plain": "plain text",
-    "replyTo": { "no": 120, "user": "Omar" },
-    "quote": null,
-    "reactions": [{ "name": "Like", "count": 1 }]
-  }]
+  "conversations": [
+    { "name": "Everyone", "kind": "everyone", "messages": [
+      { "no": 120, "time": "14:22", "user": "Omar", "text": "**bold** and `code`", "reactions": { "Like": 2 } },
+      { "no": 121, "time": "14:23", "user": "Dana Host", "text": "reply", "type": "reply", "replyTo": 120 },
+      { "no": 122, "time": "14:25", "user": "Sara", "text": "see above",
+        "quote": { "user": "Omar", "text": "**bold** and `code`", "no": 120 } }
+    ] },
+    { "name": "Direct: Sara", "kind": "direct", "participant": "Sara", "messages": [ … ] }
+  ]
 }
 ```
 
+### File size
+
+Both formats are built to stay small. On a real 123-message class chat:
+
+| | Before | Now |
+| --- | --- | --- |
+| Excel | 118 KB | 8.7 KB |
+| JSON | 51 KB | 11.8 KB |
+
+The workbook is deflate-compressed. Repeated text, such as names and
+conversation labels, is stored once in a shared-strings table, and empty cells
+are left out. The JSON drops per-message fields that repeat (the conversation,
+the date, ids, a plain-text copy) or that only hold a default value.
+
 ## Limits
 
-- Webex only shows message times, not dates, so every message gets the export
-  day's date. Export on the day of the session.
+- Webex only shows message times, not dates. A normal export uses the day you
+  export, so export on the day of the session. A chat exported from the
+  reminder uses the day the meeting was captured.
 - A quote says who was quoted but not which message. `quote_of` is filled in
   only when one earlier message from that person has exactly the quoted text.
 - The extension reads the web app's markup (`data-test` attributes, the
@@ -117,12 +158,16 @@ keep working.
 ```
 extension/              the extension source (loads unpacked in both browsers)
   manifest.json         Firefox and Chrome keys; tools/build.js splits them per browser
-  background.js         injects the scraper, builds the file, downloads it
+  background.js         runs exports (Save As), keeps the capture store, opens reminders
+  capture.js            content script: hands the visible chat to the background every few seconds
   popup.*               the toolbar popup
+  reminder.*            the "export the meeting chat?" window
+  options.js            export options shared by the popup and the reminder
   lib/scrape.js         finds the chat, scrolls, opens direct chats, parses messages
   lib/markdown.js       rendered message HTML → markdown
+  lib/merge.js          merges partial views of a chat in display order
   lib/export.js         numbering, reply/quote links, XLSX rows and JSON
-  lib/xlsx.js           dependency-free one-sheet XLSX and zip writer
+  lib/xlsx.js           dependency-free one-sheet XLSX writer (shared strings, deflate)
   vendor/               webextension-polyfill 0.12.0 (MPL-2.0)
 tools/
   build.js              writes dist/firefox and dist/chrome, plus their .zip files
@@ -130,14 +175,14 @@ tools/
   serve.js              serves fixtures/ and tests with the scraper scripts added
   make-icons.js         draws the icons
 test/
-  export.test.js        Node tests for the XLSX and JSON output (npm test)
+  export.test.js        Node tests for the XLSX and JSON output and merging (npm test)
   scrape.test.html      browser tests for the scraper and markdown converter
 ```
 
 The extension uses the promise-based `browser.*` API everywhere.
 [webextension-polyfill](https://github.com/mozilla/webextension-polyfill)
-provides it in Chrome, and it does nothing in Firefox. The popup, the
-background script and the injected scraper all load it.
+provides it in Chrome, and it does nothing in Firefox. The popup, the reminder,
+the background script and the content scripts all load it.
 
 **Capturing new snapshots of the Webex markup:** in the meeting tab, right-click
 a chat message → **Inspect**. In the Console, paste

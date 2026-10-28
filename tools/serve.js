@@ -7,7 +7,7 @@ const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
 const port = +process.argv[2] || 8765;
-const SCRIPTS = ["lib/markdown.js", "lib/scrape.js", "lib/xlsx.js", "lib/export.js"]
+const SCRIPTS = ["lib/markdown.js", "lib/merge.js", "lib/scrape.js", "lib/xlsx.js", "lib/export.js"]
   .map((s) => `<script src="/extension/${s}"></script>`).join("");
 
 http.createServer((req, res) => {
@@ -20,7 +20,8 @@ http.createServer((req, res) => {
   const file = path.join(ROOT, url);
   if (!file.startsWith(ROOT) || !fs.existsSync(file)) { res.writeHead(404); return res.end("not found"); }
   let body = fs.readFileSync(file);
-  const type = file.endsWith(".js") ? "text/javascript" : file.endsWith(".html") ? "text/html; charset=utf-8" : "application/octet-stream";
+  const TYPES = { ".js": "text/javascript", ".css": "text/css", ".html": "text/html; charset=utf-8", ".png": "image/png", ".json": "application/json" };
+  const type = TYPES[path.extname(file)] || "application/octet-stream";
   if (url.startsWith("/fixtures/") && file.endsWith(".html")) body = body.toString().replace(/<\/html>\s*$/, SCRIPTS + "</html>");
   res.writeHead(200, { "content-type": type, "cache-control": "no-store" });
   res.end(body);

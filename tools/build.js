@@ -31,18 +31,22 @@ function files(dir, rel = "") {
   });
 }
 
-fs.rmSync(DIST, { recursive: true, force: true });
-for (const [name, adapt] of Object.entries(targets)) {
-  const out = path.join(DIST, name);
-  const manifest = adapt(JSON.parse(JSON.stringify(base)));
-  const entries = [];
-  for (const f of files(SRC)) {
-    const data = f === "manifest.json" ? JSON.stringify(manifest, null, 2) + "\n" : fs.readFileSync(path.join(SRC, f));
-    fs.mkdirSync(path.dirname(path.join(out, f)), { recursive: true });
-    fs.writeFileSync(path.join(out, f), data);
-    entries.push({ name: f, data: typeof data === "string" ? data : new Uint8Array(data) });
+async function main() {
+  fs.rmSync(DIST, { recursive: true, force: true });
+  for (const [name, adapt] of Object.entries(targets)) {
+    const out = path.join(DIST, name);
+    const manifest = adapt(JSON.parse(JSON.stringify(base)));
+    const entries = [];
+    for (const f of files(SRC)) {
+      const data = f === "manifest.json" ? JSON.stringify(manifest, null, 2) + "\n" : fs.readFileSync(path.join(SRC, f));
+      fs.mkdirSync(path.dirname(path.join(out, f)), { recursive: true });
+      fs.writeFileSync(path.join(out, f), data);
+      entries.push({ name: f, data: typeof data === "string" ? data : new Uint8Array(data) });
+    }
+    const pkg = path.join(DIST, `webex-chat-export-${base.version}-${name}.zip`);
+    fs.writeFileSync(pkg, await zip(entries));
+    console.log(`${name}: ${path.relative(ROOT, out)}  ${path.relative(ROOT, pkg)}`);
   }
-  const pkg = path.join(DIST, `webex-chat-export-${base.version}-${name}.zip`);
-  fs.writeFileSync(pkg, zip(entries));
-  console.log(`${name}: ${path.relative(ROOT, out)}  ${path.relative(ROOT, pkg)}`);
 }
+
+main();
