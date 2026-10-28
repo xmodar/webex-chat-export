@@ -18,13 +18,33 @@
     }
   }
 
+  function localZone() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch (e) { return "UTC"; }
+  }
+
   function norm(s) { return String(s || "").replace(/\s+/g, " ").trim(); }
 
-  /* Flatten conversations into numbered messages with resolved links. */
+  var RTL_CHAR = /[֐-ࣿיִ-﷿ﹰ-﻿]/;
+
+  // right-to-left when most messages are written in an RTL script
+  function mostlyRtl(messages) {
+    var rtl = 0, n = 0;
+    messages.forEach(function (m) {
+      if (m.kind === "system" || !m.text) return;
+      n++;
+      if (RTL_CHAR.test(m.text)) rtl++;
+    });
+    return n > 0 && rtl * 2 > n;
+  }
+
+  /* Flatten conversations into numbered messages with resolved links.
+     "You" becomes opts.myName when set, else the name found in the
+     participants list (result.self), else it stays "You". */
   function normalize(result, opts) {
     opts = opts || {};
-    var date = opts.date || today(opts.timezone || "Asia/Riyadh");
-    var me = (opts.myName || "").trim();
+    var timezone = opts.timezone || localZone();
+    var date = opts.date || today(timezone);
+    var me = (opts.myName || "").trim() || (result.self || "").trim();
     function who(u) { return me && u === "You" ? me : u; }
 
     var no = 0, byId = {}, out = [];
@@ -63,7 +83,7 @@
         out.push(row);
       });
     });
-    return { date: date, messages: out, who: who };
+    return { date: date, timezone: timezone, self: me, messages: out, who: who };
   }
 
   var COLUMNS = [
@@ -95,7 +115,8 @@
     var n = normalize(result, opts);
     var bytes = Xlsx.buildXlsx({
       sheetName: n.date,
-      rtl: opts && opts.rtl !== undefined ? opts.rtl : true,
+      rtl: opts && (opts.direction === "rtl" || opts.direction === "ltr")
+        ? opts.direction === "rtl" : mostlyRtl(n.messages),
       columns: COLUMNS,
       rows: n.messages.map(function (m) {
         var r = toRow(m);
@@ -111,7 +132,8 @@
     var doc = {
       meeting: result.meeting || "",
       date: n.date,
-      timezone: (opts && opts.timezone) || "Asia/Riyadh",
+      timezone: n.timezone,
+      you: n.self || "You",
       exportedAt: new Date().toISOString(),
       conversations: result.conversations.map(function (c) {
         var name = c.kind === "direct" ? "Direct: " + n.who(c.participant) : c.name;
@@ -123,7 +145,7 @@
     return { name: "chat-" + n.date + ".json", type: "application/json", bytes: bytes, count: n.messages.length };
   }
 
-  var api = { normalize: normalize, buildXlsxFile: buildXlsxFile, buildJsonFile: buildJsonFile, COLUMNS: COLUMNS };
+  var api = { normalize: normalize, buildXlsxFile: buildXlsxFile, buildJsonFile: buildJsonFile, mostlyRtl: mostlyRtl, COLUMNS: COLUMNS };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.WebexExport = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

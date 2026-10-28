@@ -1,6 +1,8 @@
 /* global browser */
 var ORIGINS = ["*://*.webex.com/*"];
-var DEFAULTS = { format: "xlsx", includeDirect: true, myName: "SDAIA Academy", timezone: "Asia/Riyadh", rtl: true };
+var LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+// myName / timezone left empty mean "detect": the participants list and this computer's zone
+var DEFAULTS = { format: "xlsx", includeDirect: true, myName: "", timezone: "", direction: "auto" };
 
 var $ = function (id) { return document.getElementById(id); };
 var btn = $("export"), out = $("status");
@@ -17,8 +19,8 @@ function read() {
     format: document.querySelector('input[name="format"]:checked').value,
     includeDirect: $("includeDirect").checked,
     myName: $("myName").value.trim(),
-    timezone: $("timezone").value.trim() || DEFAULTS.timezone,
-    rtl: $("rtl").checked
+    timezone: $("timezone").value.trim(),
+    direction: $("direction").value
   };
 }
 
@@ -27,8 +29,13 @@ browser.storage.local.get(DEFAULTS).then(function (o) {
   $("includeDirect").checked = o.includeDirect;
   $("myName").value = o.myName;
   $("timezone").value = o.timezone;
-  $("rtl").checked = o.rtl;
+  $("direction").value = o.direction;
 });
+$("timezone").placeholder = LOCAL_TZ;
+
+function validZone(tz) {
+  try { new Intl.DateTimeFormat("en", { timeZone: tz }); return true; } catch (e) { return false; }
+}
 
 // show an export that is still running (or just finished) from an earlier popup
 browser.storage.session.get("status").then(function (o) {
@@ -41,6 +48,9 @@ browser.runtime.onMessage.addListener(function (msg) {
 
 btn.addEventListener("click", async function () {
   var opts = read();
+  if (opts.timezone && !validZone(opts.timezone)) {
+    return show({ state: "error", text: "Unknown time zone “" + opts.timezone + "”. Use a name like Europe/Berlin." });
+  }
   browser.storage.local.set(opts);
   // Firefox lets people withhold host access; ask while we have the click
   var ok = await browser.permissions.contains({ origins: ORIGINS }) || await browser.permissions.request({ origins: ORIGINS });

@@ -18,13 +18,19 @@
 
   <details>
     <summary>Options</summary>
-    <label class="field">Rename “You” to
-      <input type="text" id="myName" placeholder="leave empty to keep “You”">
+    <label class="field">Show your messages as
+      <input type="text" id="myName" placeholder="your name from the participants list">
     </label>
     <label class="field">Time zone (for the date)
-      <input type="text" id="timezone" placeholder="Asia/Riyadh">
+      <input type="text" id="timezone">
     </label>
-    <label class="check"><input type="checkbox" id="rtl" checked> Right-to-left sheet</label>
+    <label class="field">Sheet direction
+      <select id="direction">
+        <option value="auto">Automatic (from the messages)</option>
+        <option value="ltr">Left to right</option>
+        <option value="rtl">Right to left</option>
+      </select>
+    </label>
   </details>
 
   <button id="export" type="button">Export chat</button>

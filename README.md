@@ -48,12 +48,18 @@ add-on already loaded.
 
 The first time, Firefox may ask to allow access to `webex.com`.
 
-Options in the popup:
+Webex labels your own messages "You". The export replaces that with your
+display name, which it reads from the top entry of the participants list (the
+one marked "Me"). If the participants panel is closed, it opens it briefly and
+then closes it again.
 
-- Rename "You" (default `SDAIA Academy`; leave it empty to keep "You").
-- The time zone used for the date (default `Asia/Riyadh`).
-- Include or skip direct chats.
-- Right-to-left sheet.
+Options in the popup (all optional):
+
+- **Show your messages as:** a name to use instead of the detected one.
+- **Time zone:** used for the date. Empty means this computer's time zone.
+- **Sheet direction:** automatic (right-to-left when most messages are in
+  Arabic, Hebrew, Persian or Urdu), left-to-right, or right-to-left.
+- **Include direct (private) chats.**
 
 ## Output
 
@@ -65,7 +71,7 @@ keep working.
 | Column | Contents |
 | --- | --- |
 | `timestamp` | `YYYY-MM-DD HH:mm`: today's date in the chosen time zone plus the message time |
-| `user` | The sender ("You" renamed as configured) |
+| `user` | The sender; "You" becomes your detected or chosen name |
 | `text` | The message as markdown, with any quote moved to the `quoted_*` columns |
 | `conversation` | `Everyone` or `Direct: <name>` |
 | `no` | The message number, counting across all conversations |
@@ -80,14 +86,15 @@ keep working.
 {
   "meeting": "Course title",
   "date": "2026-10-28",
-  "timezone": "Asia/Riyadh",
+  "timezone": "Europe/Berlin",
+  "you": "Dana Host",
   "exportedAt": "2026-10-28T11:40:00.000Z",
   "conversations": [{ "name": "Everyone", "kind": "everyone", "participant": "", "messages": 123 }],
   "messages": [{
     "no": 121, "id": "act-…", "conversation": "Everyone", "kind": "reply",
-    "timestamp": "2026-10-28 14:23", "time": "14:23", "user": "SDAIA Academy",
+    "timestamp": "2026-10-28 14:23", "time": "14:23", "user": "Dana Host",
     "text": "markdown", "plain": "plain text",
-    "replyTo": { "no": 120, "user": "SDAIA Academy" },
+    "replyTo": { "no": 120, "user": "Omar" },
     "quote": null,
     "reactions": [{ "name": "Like", "count": 1 }]
   }]

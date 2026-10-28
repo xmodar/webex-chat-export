@@ -3,7 +3,7 @@
  * only the web.webex.com frame that hosts the chat answers.
  *
  *   await WebexChatScraper.run({ includeDirect: true, onProgress: fn })
- *     -> { found: true, meeting, conversations: [{ name, kind, participant, messages: [...] }] }
+ *     -> { found: true, meeting, self, conversations: [{ name, kind, participant, messages: [...] }] }
  *     -> { found: false } in frames without the chat
  *
  * Every lookup walks open shadow roots too, so it doesn't matter where in the
@@ -213,6 +213,32 @@
     return waitFor(function () { return !$("#direct-chat-back-button") && $("#direct-tabpanel"); }, 5000);
   }
 
+  // Your own display name: the participants list puts you first, tagged "Me".
+  // The panel shares the side bar with the chat, so it is opened just long
+  // enough to read it.
+  function selfFromList() {
+    var items = $$('[data-test="participant-list-item"]');
+    if (!items.length) return "";
+    var me = items.filter(function (it) {
+      var sub = it.querySelector('[id^="participant-secondary-text-"]');
+      return sub && /(^|[\s,])Me([\s,]|$)/.test(text(sub));
+    })[0] || items[0];
+    var name = me.querySelector('[data-test="participant-name-wrapper"]');
+    return (name && (name.getAttribute("aria-label") || text(name))) ||
+      (me.getAttribute("aria-label") || "").split(",")[0].trim();
+  }
+
+  async function selfName() {
+    var name = selfFromList();
+    if (name) return name;
+    var toggle = $('[data-test="participants-toggle-button"]');
+    if (!toggle) return "";
+    toggle.click();
+    name = await waitFor(selfFromList, 4000) || "";
+    if ($('[data-test="participant-list-item"]') && toggle.getAttribute("aria-expanded") === "true") toggle.click();
+    return name;
+  }
+
   function meetingName() {
     var ed = $('#everyone-tabpanel .ql-editor[aria-label^="Write a message to "]');
     return ed ? ed.getAttribute("aria-label").replace(/^Write a message to\s+/, "") : "";
@@ -224,6 +250,9 @@
     if (location.hostname !== "web.webex.com" && !$("#everyone-tab") && !$("#in-meeting-chat-toggle-button")) {
       return { found: false };
     }
+    var participantsOpen = !!$('[data-test="participant-list-item"]');
+    progress("Looking up your name…");
+    var self = await selfName();
     if (!(await ensureChatOpen())) return { found: false, error: "Could not open the chat panel." };
 
     var startedOn = $("#direct-tab[aria-selected='true']") ? "direct" : "everyone";
@@ -259,8 +288,12 @@
     }
 
     await selectTab(startedOn);
-    return { found: true, meeting: meeting, conversations: conversations };
+    if (participantsOpen && !$('[data-test="participant-list-item"]')) {
+      var toggle = $('[data-test="participants-toggle-button"]');
+      if (toggle) toggle.click(); // put the side bar back the way it was
+    }
+    return { found: true, meeting: meeting, self: self, conversations: conversations };
   }
 
-  root.WebexChatScraper = { run: run, parseMessage: parseMessage, readConversation: readConversation };
+  root.WebexChatScraper = { run: run, parseMessage: parseMessage, readConversation: readConversation, selfFromList: selfFromList };
 })(typeof globalThis !== "undefined" ? globalThis : this);

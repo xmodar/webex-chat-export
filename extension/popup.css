@@ -37,7 +37,7 @@ legend { color: var(--muted); padding: 0 4px; }
 details { margin: 8px 0 12px; }
 summary { cursor: pointer; color: var(--muted); }
 .field { display: block; margin-top: 8px; color: var(--muted); }
-.field input {
+.field input, .field select {
   display: block; box-sizing: border-box; width: 100%; margin-top: 3px; padding: 5px 7px;
   border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--fg); font: inherit;
 }

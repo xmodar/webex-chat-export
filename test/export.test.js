@@ -9,6 +9,7 @@ const Export = require("../extension/lib/export.js");
 
 const result = {
   meeting: "Demo",
+  self: "Dana Host",
   conversations: [
     { name: "Everyone", kind: "everyone", participant: "", messages: [
       { id: "a1", kind: "message", user: "You", time: "10:00", text: "**Welcome** & <hello>", reactions: [{ name: "Like", count: 2 }] },
@@ -23,15 +24,15 @@ const result = {
     { name: "Direct: Empty", kind: "direct", participant: "Empty", messages: [] }
   ]
 };
-const opts = { myName: "SDAIA Academy", date: "2026-10-28" };
+const opts = { date: "2026-10-28", timezone: "UTC" };
 
 const n = Export.normalize(result, opts);
 assert.strictEqual(n.messages.length, 6);
 assert.deepStrictEqual(n.messages.map((m) => m.no), [1, 2, 3, 4, 5, 6]);
-assert.strictEqual(n.messages[0].user, "SDAIA Academy");
+assert.strictEqual(n.messages[0].user, "Dana Host");
 assert.strictEqual(n.messages[0].timestamp, "2026-10-28 10:00");
-assert.deepStrictEqual(n.messages[1].replyTo, { no: 1, user: "SDAIA Academy" });
-assert.deepStrictEqual(n.messages[2].quote, { no: 1, user: "SDAIA Academy", text: "**Welcome** & <hello>" });
+assert.deepStrictEqual(n.messages[1].replyTo, { no: 1, user: "Dana Host" });
+assert.deepStrictEqual(n.messages[2].quote, { no: 1, user: "Dana Host", text: "**Welcome** & <hello>" });
 assert.strictEqual(n.messages[5].conversation, "Direct: Sara");
 
 const x = Export.buildXlsxFile(result, opts);
@@ -41,6 +42,19 @@ const j = Export.buildJsonFile(result, opts);
 const doc = JSON.parse(Buffer.from(j.bytes).toString("utf8"));
 assert.strictEqual(doc.messages.length, 6);
 assert.deepStrictEqual(doc.conversations.map((c) => c.messages), [5, 1, 0]);
+
+// the override beats the detected name; with neither, "You" stays
+assert.strictEqual(Export.normalize(result, { myName: "Prof. X", date: "d" }).messages[0].user, "Prof. X");
+assert.strictEqual(Export.normalize(Object.assign({}, result, { self: "" }), { date: "d" }).messages[0].user, "You");
+assert.strictEqual(doc.you, "Dana Host");
+assert.strictEqual(doc.timezone, "UTC");
+
+// sheet direction follows the script most messages are written in
+assert.strictEqual(Export.mostlyRtl(n.messages), false);
+assert.strictEqual(Export.mostlyRtl([{ kind: "message", text: "مرحبا" }, { kind: "message", text: "hi" }, { kind: "message", text: "שלום" }]), true);
+const sheetXml = (f) => Buffer.from(f.bytes).toString("latin1");
+assert.ok(!/rightToLeft/.test(sheetXml(x)));
+assert.ok(/rightToLeft="1"/.test(sheetXml(Export.buildXlsxFile(result, Object.assign({ direction: "rtl" }, opts)))));
 
 assert.strictEqual(Xlsx.colName(0), "A");
 assert.strictEqual(Xlsx.colName(25), "Z");

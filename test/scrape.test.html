@@ -14,6 +14,17 @@
 <pre id="results">running…</pre>
 
 <div id="fixture" hidden>
+  <mdc-button data-test="participants-toggle-button" aria-expanded="true"></mdc-button>
+  <div role="tree" aria-label="Participants">
+    <div role="treeitem" aria-label="Omar, Host, presenter" data-test="participant-list-item">
+      <div aria-label="Omar" data-test="participant-name-wrapper"><mdc-text>Omar</mdc-text></div>
+      <div><mdc-text id="participant-secondary-text-1">Host, presenter</mdc-text></div>
+    </div>
+    <div role="treeitem" aria-label="Dana Host, Me, Unverified" data-test="participant-list-item">
+      <div aria-label="Dana Host" data-test="participant-name-wrapper"><mdc-text>Dana Host</mdc-text></div>
+      <div><mdc-text id="participant-secondary-text-2">Me</mdc-text></div>
+    </div>
+  </div>
   <mdc-tablist>
     <mdc-tab id="everyone-tab" aria-selected="true" tab-id="everyone">Everyone</mdc-tab>
     <mdc-tab id="direct-tab" aria-selected="false" tab-id="direct">Direct</mdc-tab>
@@ -90,6 +101,7 @@
   var m = r.conversations[0].messages;
 
   eq("meeting name", r.meeting, "Demo Course");
+  eq("own name from the participants list", r.self, "Dana Host");
   eq("count", m.length, 6);
   eq("kinds", m.map(function (x) { return x.kind; }), ["message", "message", "reply", "system", "message", "message"]);
   eq("bold/italic/links", m[0].text, "**Hello** _all_, see [the doc](https://example.com/x) and modar.me");
