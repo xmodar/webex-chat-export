@@ -15,9 +15,11 @@ What it does that the console script couldn't:
 | Only what was rendered was saved. | Scrolls each conversation to the top until no older messages load, then walks down, collecting messages as it goes. |
 
 It also keeps reactions and system lines (for example "X deleted their own
-message"), and opens the chat panel if it is closed. If you close the meeting
-tab without exporting, it offers to export the chat it saw during the meeting
-(see [Reminder](#reminder-when-a-meeting-tab-closes)).
+message"), and opens the chat panel if it is closed. An optional reminder,
+off by default, offers to export the chat if you close the meeting tab
+without exporting (see [Reminder](#reminder-when-a-meeting-tab-closes)).
+
+When you aren't exporting, the extension runs nothing in your meetings.
 
 ## Install
 
@@ -45,17 +47,17 @@ add-on already loaded.
 2. Click the toolbar icon → choose **Excel** or **JSON** → **Export chat…**.
 3. Keep the meeting tab in front while the export runs. The extension scrolls
    the chat and opens each direct chat, then puts the chat back on the tab it
-   was showing.
+   was showing, scrolled back to where you were.
 4. Choose where to save the file. The suggested name is `chat-YYYY-MM-DD.xlsx`
    or `.json`. If you cancel the dialog, nothing is saved and the chat still
    counts as not exported.
 
 The first time, Firefox may ask to allow access to `webex.com`.
 
-Webex labels your own messages "You". The export replaces that with your
-display name, which it reads from the top entry of the participants list (the
-one marked "Me"). If the participants panel is closed, it opens it briefly and
-then closes it again.
+Webex labels your own messages "You". The export replaces that with the name
+in **Show your messages as**. If that is empty, it reads your display name from
+the top entry of the participants list (the one marked "Me"), opening the
+participants panel briefly if it is closed.
 
 Options in the popup (all optional):
 
@@ -65,23 +67,33 @@ Options in the popup (all optional):
 - **Sheet direction:** automatic (right-to-left when most messages are in
   Arabic, Hebrew, Persian or Urdu), left-to-right, or right-to-left.
 - **Include direct (private) chats.**
-- **Remind me by default in new meetings:** whether new meetings start with
-  the close reminder on (described below). It is on by default.
+- **Turn on the close reminder in every new meeting:** off by default. See
+  below, including why it can slow Webex down.
 
 ### Reminder when a meeting tab closes
 
-Once a meeting tab is closed, its chat is gone, so the extension saves what the
-chat panel shows while the meeting runs. Every few seconds it reads the
-Everyone list and any direct chat you have open. It doesn't click or scroll
-anything. If the tab closes, you leave the meeting, or the browser quits while
-messages are still unexported, a window opens with the same format and
+**Optional, off by default.** Once a meeting tab is closed, its chat is gone.
+With the reminder on, the extension keeps a copy of what the chat panel shows
+while the meeting runs: the Everyone list, and any direct chat you have open.
+It doesn't click or scroll anything.
+
+> **It can make Webex slower.** Keeping the copy means watching the chat
+> panel for the whole meeting. On a slower computer, or in a long or busy
+> meeting, Webex can feel slower or less responsive. Turn it on only if you
+> need it.
+
+The extension keeps that work small. It watches only the side panel, waits
+for changes to settle, reads only messages it hasn't seen yet, and saves them
+in batches. While the reminder is off, none of this code is loaded into the
+meeting. With the reminder on, if the tab closes, you leave the meeting, or the
+browser quits while messages are still unexported, a window opens with the same format and
 options. From there you can **Export…**, choose **Not now** (the chat then
 appears under **Not exported yet** in the popup), or **Discard** it.
 
-The reminder can be switched on or off. The default for new meetings is the
-**Remind me by default in new meetings** option. On a meeting tab, the popup
-also shows **Remind me to export if this meeting closes**, which overrides the
-default for that meeting only. Switching it off stops the capture and deletes
+To turn it on for one meeting, use **Remind me to export if this meeting
+closes**, which the popup shows on a meeting tab. To turn it on for every new
+meeting, use **Turn on the close reminder in every new meeting** under
+Options. The per-meeting switch overrides the default for that meeting only. Switching it off stops the capture and deletes
 what was already captured for that meeting, so no reminder appears.
 
 What the reminder can export is what the chat panel showed while the meeting
@@ -168,7 +180,7 @@ the date, ids, a plain-text copy) or that only hold a default value.
 extension/              the extension source (loads unpacked in both browsers)
   manifest.json         Firefox and Chrome keys; tools/build.js splits them per browser
   background.js         runs exports (Save As), keeps the capture store, opens reminders
-  capture.js            content script: hands the visible chat to the background every few seconds
+  capture.js            reminder capture (only loaded while it is on): sends new chat messages to the background
   popup.*               the toolbar popup
   reminder.*            the "export the meeting chat?" window
   options.js            export options shared by the popup and the reminder

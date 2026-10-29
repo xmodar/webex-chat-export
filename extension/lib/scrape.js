@@ -18,7 +18,13 @@
 
   /* ---------- shadow-piercing DOM helpers ------------------------------ */
 
+  // Walking every shadow root means visiting the whole meeting UI, so it is
+  // the fallback: lookups try the normal DOM first (where Webex keeps the
+  // chat today), and the list of shadow roots is reused for a second.
+  var rootCache = { at: 0, list: null };
+
   function roots(start) {
+    if (start === document && rootCache.list && Date.now() - rootCache.at < 1000) return rootCache.list;
     var out = [start], stack = [start];
     while (stack.length) {
       var r = stack.pop(), all = r.querySelectorAll("*");
@@ -26,21 +32,27 @@
         if (all[i].shadowRoot) { out.push(all[i].shadowRoot); stack.push(all[i].shadowRoot); }
       }
     }
+    if (start === document) rootCache = { at: Date.now(), list: out };
     return out;
   }
 
   function $(sel, start) {
-    var rs = roots(start || document);
-    for (var i = 0; i < rs.length; i++) {
-      var hit = rs[i].querySelector(sel);
+    start = start || document;
+    var hit = start.querySelector(sel);
+    if (hit) return hit;
+    var rs = roots(start);
+    for (var i = 1; i < rs.length; i++) {
+      hit = rs[i].querySelector(sel);
       if (hit) return hit;
     }
     return null;
   }
 
   function $$(sel, start) {
-    var out = [];
-    roots(start || document).forEach(function (r) {
+    start = start || document;
+    var out = Array.prototype.slice.call(start.querySelectorAll(sel));
+    if (out.length) return out;
+    roots(start).slice(1).forEach(function (r) {
       out.push.apply(out, r.querySelectorAll(sel));
     });
     return out;
@@ -141,6 +153,8 @@
 
   async function readConversation(panel) {
     var box = scroller(panel), order = [], seen = {};
+    // put the chat back where it was, measured from the bottom (new messages may arrive meanwhile)
+    var fromBottom = box ? box.scrollHeight - box.scrollTop : 0;
 
     if (box) {
       // pull older history in: keep jumping to the top until nothing new loads
@@ -161,35 +175,38 @@
       }
     }
     merge(order, seen, listItems(panel));
+    if (box) box.scrollTop = box.scrollHeight - fromBottom;
     return WebexMerge.linkReplies(order.map(function (id) { return seen[id]; }));
   }
 
-  /* What is on screen right now, without clicking or scrolling anything:
-     the Everyone list and/or the open direct chat. Used by the live capture. */
-  function readVisible(opts) {
-    opts = opts || {};
-    var out = [], everyone = $("#everyone-tabpanel"), direct = $("#direct-tabpanel");
-    if (everyone && listItems(everyone).length) {
-      out.push({ name: "Everyone", kind: "everyone", participant: "",
-                 messages: WebexMerge.linkReplies(listItems(everyone).map(parseMessage).filter(Boolean)) });
-    }
-    if (direct && $("#direct-chat-back-button") && listItems(direct).length) {
-      var who = text(direct.querySelector(".direct-chat-header mdc-text"));
-      if (who) {
-        out.push({ name: "Direct: " + who, kind: "direct", participant: who,
-                   messages: WebexMerge.linkReplies(listItems(direct).map(parseMessage).filter(Boolean)) });
-      }
-    }
-    return { meeting: meetingName(), self: opts.skipSelf ? "" : selfFromList(), conversations: out };
+  // the part of a rendered list that `known` hasn't seen yet, starting one
+  // message early so the receiver knows where the new ones go
+  function unseen(items, known) {
+    if (!known) return items;
+    for (var i = 0; i < items.length && known[items[i].id]; i++);
+    return i === items.length ? [] : items.slice(Math.max(0, i - 1));
   }
 
-  // cheap fingerprint of the rendered lists, to skip parsing when nothing changed
-  function visibleSignature() {
-    return ["#everyone-tabpanel", "#direct-tabpanel"].map(function (sel) {
-      var p = $(sel), items = p ? listItems(p) : [];
-      return items.length + ":" + (items[0] ? items[0].id : "") + ":" + (items.length ? items[items.length - 1].id : "") +
-        ":" + (p ? $$('[data-test="reaction-summary"] [data-count]', p).length : 0);
-    }).join("|") + "|" + !!$('[data-test="participant-list-item"]');
+  /* What is on screen right now, without clicking or scrolling anything:
+     the Everyone list and/or the open direct chat. Used by the live capture.
+     opts.known ({ id: true }) limits the parsing to messages not sent before;
+     opts.skipSelf leaves the participants list alone; opts.skipMeeting the title. */
+  function readVisible(opts) {
+    opts = opts || {};
+    var out = [], everyone = document.getElementById("everyone-tabpanel") || $("#everyone-tabpanel");
+    var direct = document.getElementById("direct-tabpanel") || $("#direct-tabpanel");
+    function add(panel, conv) {
+      var items = unseen(listItems(panel), opts.known);
+      if (!items.length) return;
+      conv.messages = WebexMerge.linkReplies(items.map(parseMessage).filter(Boolean));
+      out.push(conv);
+    }
+    if (everyone) add(everyone, { name: "Everyone", kind: "everyone", participant: "" });
+    if (direct && direct.querySelector("#direct-chat-back-button")) {
+      var who = text(direct.querySelector(".direct-chat-header mdc-text"));
+      if (who) add(direct, { name: "Direct: " + who, kind: "direct", participant: who });
+    }
+    return { meeting: opts.skipMeeting ? "" : meetingName(), self: opts.skipSelf ? "" : selfFromList(), conversations: out };
   }
 
   /* ---------- driving the chat panel ----------------------------------- */
@@ -311,6 +328,6 @@
 
   root.WebexChatScraper = {
     run: run, parseMessage: parseMessage, readConversation: readConversation, selfFromList: selfFromList,
-    readVisible: readVisible, visibleSignature: visibleSignature
+    readVisible: readVisible
   };
 })(typeof globalThis !== "undefined" ? globalThis : this);

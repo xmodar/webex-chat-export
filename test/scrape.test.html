@@ -112,6 +112,12 @@
   eq("given name skips the lookup", given.self, "Prof. X");
   eq("live capture skips the lookup when told", WebexChatScraper.readVisible({ skipSelf: true }).self, "");
   eq("live capture reads the name otherwise", WebexChatScraper.readVisible().self, "Dana Host");
+  var known = { "act-1": true, "act-2": true, "act-3": true, "act-4": true, "act-5": true };
+  eq("live capture parses only new messages, after one anchor",
+     WebexChatScraper.readVisible({ known: known }).conversations[0].messages.map(function (x) { return x.id; }), ["act-5", "act-6"]);
+  known["act-6"] = true;
+  eq("nothing new, nothing sent", WebexChatScraper.readVisible({ known: known, skipMeeting: true, skipSelf: true }),
+     { meeting: "", self: "", conversations: [] });
   eq("count", m.length, 6);
   eq("kinds", m.map(function (x) { return x.kind; }), ["message", "message", "reply", "system", "message", "message"]);
   eq("bold/italic/links", m[0].text, "**Hello** _all_, see [the doc](https://example.com/x) and modar.me");

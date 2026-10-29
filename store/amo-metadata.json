@@ -3,9 +3,19 @@
     "license": "MIT",
     "approval_notes": "No build step and no minified first-party code: the package is the extension/ folder with the manifest adapted by tools/build.js. vendor/browser-polyfill.min.js is webextension-polyfill 0.12.0, unmodified, from npm. To test, the extension needs a Webex meeting joined in the browser (web.webex.com); test/scrape.test.html runs the chat reader against synthetic Webex markup."
   },
-  "categories": ["social-communication"],
-  "summary": { "en-US": "Export a Webex meeting chat (Everyone and direct chats, with markdown, replies and quotes) to one Excel sheet or JSON." },
-  "description": { "en-US": "Save the full chat of a Webex meeting you joined in the browser, in one click.\n\n• Everyone and every direct (private) chat, in one Excel sheet or one JSON file\n• Formatting kept as markdown: bold, italics, links, lists, headings, quotes and code blocks with their language\n• Replies linked to the message that started the thread; quotes linked to the message they quote\n• Reactions and system lines kept\n• Your own messages are shown with your name from the participants list instead of \"You\"; you can override it\n• Loads the whole history before exporting\n• Asks where to save the file\n• Forgot to export? If you close the meeting tab, it offers to export the chat it saw during the meeting\n• Small files: compressed Excel and compact JSON\n\nEverything stays on your computer: the extension collects nothing, sends nothing, and only runs on webex.com.\n\nOpen source (MIT). Not affiliated with Cisco or Webex." },
-  "homepage": { "en-US": "https://github.com/xmodar/webex-chat-export" },
-  "support_url": { "en-US": "https://github.com/xmodar/webex-chat-export/issues" }
+  "categories": [
+    "social-communication"
+  ],
+  "summary": {
+    "en-US": "Export a Webex meeting chat (Everyone and direct chats, with markdown, replies and quotes) to one Excel sheet or JSON."
+  },
+  "description": {
+    "en-US": "Save the full chat of a Webex meeting you joined in the browser, in one click.\n\n• Everyone and every direct (private) chat, in one Excel sheet or one JSON file\n• Formatting kept as markdown: bold, italics, links, lists, headings, quotes and code blocks with their language\n• Replies linked to the message that started the thread; quotes linked to the message they quote\n• Reactions and system lines kept\n• Your own messages are shown with your name from the participants list instead of \"You\"; you can override it\n• Loads the whole history before exporting\n• Asks where to save the file\n• Optional reminder (off by default): if you close the meeting tab before exporting, it offers to export the chat it saw. It watches the chat during the meeting, so it can make Webex slower.\n• Small files: compressed Excel and compact JSON\n\nEverything stays on your computer: the extension collects nothing, sends nothing, and only runs on webex.com.\n\nOpen source (MIT). Not affiliated with Cisco or Webex."
+  },
+  "homepage": {
+    "en-US": "https://github.com/xmodar/webex-chat-export"
+  },
+  "support_url": {
+    "en-US": "https://github.com/xmodar/webex-chat-export/issues"
+  }
 }

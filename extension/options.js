@@ -6,8 +6,9 @@
 var ExportOptions = (function () {
   "use strict";
   var LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  // autoCapture: whether new meetings start with the capture (and close reminder) on
-  var DEFAULTS = { format: "xlsx", includeDirect: true, myName: "", timezone: "", direction: "auto", autoCapture: true };
+  // autoCapture: whether new meetings start with the capture (and close reminder) on.
+  // Off by default: watching the chat can make Webex slower.
+  var DEFAULTS = { format: "xlsx", includeDirect: true, myName: "", timezone: "", direction: "auto", autoCapture: false };
 
   function $(id) { return document.getElementById(id); }
 
