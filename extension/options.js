@@ -6,7 +6,8 @@
 var ExportOptions = (function () {
   "use strict";
   var LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  var DEFAULTS = { format: "xlsx", includeDirect: true, myName: "", timezone: "", direction: "auto" };
+  // autoCapture: whether new meetings start with the capture (and close reminder) on
+  var DEFAULTS = { format: "xlsx", includeDirect: true, myName: "", timezone: "", direction: "auto", autoCapture: true };
 
   function $(id) { return document.getElementById(id); }
 
@@ -23,6 +24,12 @@ var ExportOptions = (function () {
     $("timezone").value = o.timezone;
     $("timezone").placeholder = LOCAL_TZ;
     $("direction").value = o.direction;
+    // these two change what happens during meetings, so they are saved right away
+    if ($("autoCapture")) {
+      $("autoCapture").checked = o.autoCapture;
+      $("autoCapture").addEventListener("change", function () { browser.storage.local.set({ autoCapture: this.checked }); });
+    }
+    $("myName").addEventListener("change", function () { browser.storage.local.set({ myName: this.value.trim() }); });
     return o;
   }
 

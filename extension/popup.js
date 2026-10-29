@@ -13,6 +13,31 @@ function show(s) {
 
 ExportOptions.load();
 
+// per-meeting switch for the capture / close reminder, shown on a Webex tab
+var meetingTab = browser.tabs.query({ active: true, currentWindow: true }).then(function (tabs) {
+  return tabs[0] && /^https:\/\/[^/]*webex\.com\//.test(tabs[0].url || "") ? tabs[0] : null;
+});
+
+function refreshTabCapture() {
+  return meetingTab.then(function (tab) {
+    if (!tab) return;
+    return browser.runtime.sendMessage({ type: "getTabCapture", tabId: tab.id }).then(function (s) {
+      $("tabCaptureRow").hidden = false;
+      $("tabCapture").checked = !!(s && s.enabled);
+    });
+  });
+}
+refreshTabCapture();
+
+$("tabCapture").addEventListener("change", async function () {
+  var tab = await meetingTab;
+  if (tab) browser.runtime.sendMessage({ type: "setTabCapture", tabId: tab.id, enabled: this.checked });
+});
+
+browser.storage.onChanged.addListener(function (changes, area) {
+  if (area === "local" && changes.autoCapture) setTimeout(refreshTabCapture, 100);
+});
+
 // show an export that is still running (or just finished) from an earlier popup
 browser.storage.session.get("status").then(function (o) {
   if (o.status && Date.now() - o.status.at < 10 * 60 * 1000) show(o.status);

@@ -59,11 +59,14 @@ then closes it again.
 
 Options in the popup (all optional):
 
-- **Show your messages as:** a name to use instead of the detected one.
+- **Show your messages as:** a name to use for your messages. When it is set,
+  the extension uses it as is and doesn't read the participants list.
 - **Time zone:** used for the date. Empty means this computer's time zone.
 - **Sheet direction:** automatic (right-to-left when most messages are in
   Arabic, Hebrew, Persian or Urdu), left-to-right, or right-to-left.
 - **Include direct (private) chats.**
+- **Remind me by default in new meetings:** whether new meetings start with
+  the close reminder on (described below). It is on by default.
 
 ### Reminder when a meeting tab closes
 
@@ -74,6 +77,12 @@ anything. If the tab closes, you leave the meeting, or the browser quits while
 messages are still unexported, a window opens with the same format and
 options. From there you can **Export…**, choose **Not now** (the chat then
 appears under **Not exported yet** in the popup), or **Discard** it.
+
+The reminder can be switched on or off. The default for new meetings is the
+**Remind me by default in new meetings** option. On a meeting tab, the popup
+also shows **Remind me to export if this meeting closes**, which overrides the
+default for that meeting only. Switching it off stops the capture and deletes
+what was already captured for that meeting, so no reminder appears.
 
 What the reminder can export is what the chat panel showed while the meeting
 ran: direct chats you never opened aren't included. A normal export opens

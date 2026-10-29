@@ -89,7 +89,38 @@ function withCaptures(fn) {
 
 function unsaved(rec) { return WebexMerge.count(rec) > (rec.exportedCount || 0); }
 
-function capture(session, tabId, snap) {
+/* Capture on/off. New meetings follow the "autoCapture" option (on by
+   default); the popup can switch it per tab, which wins until the tab closes.
+   Switching a tab off also drops what was captured there, so no reminder. */
+async function captureState(tabId) {
+  var o = await browser.storage.local.get({ autoCapture: true, myName: "" });
+  var perTab = (await browser.storage.session.get("captureTabs")).captureTabs || {};
+  var enabled = perTab[tabId] !== undefined ? perTab[tabId] : o.autoCapture;
+  return { type: "captureState", enabled: enabled, perTab: perTab[tabId] !== undefined, skipSelf: !!o.myName.trim() };
+}
+
+function dropTab(tabId) {
+  return withCaptures(function (all) {
+    Object.keys(all).forEach(function (k) { if (all[k].tabId === tabId) delete all[k]; });
+  });
+}
+
+async function pushState(tabId) {
+  var s = await captureState(tabId);
+  if (!s.enabled) await dropTab(tabId);
+  return browser.tabs.sendMessage(tabId, s).catch(function () {}); // reaches every frame of the tab
+}
+
+async function setTabCapture(tabId, enabled) {
+  var perTab = (await browser.storage.session.get("captureTabs")).captureTabs || {};
+  perTab[tabId] = !!enabled;
+  await browser.storage.session.set({ captureTabs: perTab });
+  await pushState(tabId);
+  return captureState(tabId);
+}
+
+async function capture(session, tabId, snap) {
+  if (!(await captureState(tabId)).enabled) return; // switched off since this snapshot was taken
   return withCaptures(function (all) {
     var rec = all[session] || (all[session] = { session: session, tabId: tabId, startedAt: Date.now(), conversations: [] });
     WebexMerge.mergeResult(rec, snap);
@@ -127,7 +158,7 @@ async function runExport(tabId, opts) {
     });
     var results = await browser.scripting.executeScript({
       target: target,
-      args: [{ includeDirect: opts.includeDirect }],
+      args: [{ includeDirect: opts.includeDirect, myName: opts.myName || "" }],
       func: function (o) {
         if (!globalThis.WebexChatScraper) return { found: false };
         o.onProgress = function (t) { browser.runtime.sendMessage({ type: "progress", text: t }).catch(function () {}); };
@@ -200,11 +231,29 @@ browser.runtime.onMessage.addListener(function (msg, sender) {
     case "captureEnded": remind(function (r) { return r.session === msg.session; }); break;
     case "exportCapture": exportCapture(msg.session, msg.options || {}); break;
     case "discardCapture": return discard(msg.session);
+    case "captureState?": if (tabId != null) return captureState(tabId); break;
+    case "getTabCapture": return captureState(msg.tabId);
+    case "setTabCapture": return setTabCapture(msg.tabId, msg.enabled);
   }
 });
 
+// the default or the name changed: tell open meetings (those without their own switch)
+browser.storage.onChanged.addListener(function (changes, area) {
+  if (area !== "local" || !(changes.autoCapture || changes.myName)) return;
+  browser.tabs.query({ url: "https://*.webex.com/*" }).then(function (tabs) {
+    tabs.forEach(function (t) { pushState(t.id); });
+  });
+});
+
 browser.tabs.onRemoved.addListener(function (tabId) {
-  remind(function (r) { return r.tabId === tabId; });
+  remind(function (r) { return r.tabId === tabId; }).then(function () {
+    return browser.storage.session.get("captureTabs");
+  }).then(function (o) {
+    var perTab = o.captureTabs || {};
+    if (perTab[tabId] === undefined) return;
+    delete perTab[tabId];
+    return browser.storage.session.set({ captureTabs: perTab });
+  });
 });
 
 browser.runtime.onStartup.addListener(startup);

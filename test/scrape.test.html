@@ -103,6 +103,15 @@
 
   eq("meeting name", r.meeting, "Demo Course");
   eq("own name from the participants list", r.self, "Dana Host");
+
+  // a name given in the options is used as is, without reading the participants list
+  var items = document.querySelectorAll('[data-test="participant-list-item"]');
+  items.forEach(function (el) { el.setAttribute("data-test", "participant-list-item-hidden"); });
+  var given = await WebexChatScraper.run({ includeDirect: false, myName: "Prof. X" });
+  items.forEach(function (el) { el.setAttribute("data-test", "participant-list-item"); });
+  eq("given name skips the lookup", given.self, "Prof. X");
+  eq("live capture skips the lookup when told", WebexChatScraper.readVisible({ skipSelf: true }).self, "");
+  eq("live capture reads the name otherwise", WebexChatScraper.readVisible().self, "Dana Host");
   eq("count", m.length, 6);
   eq("kinds", m.map(function (x) { return x.kind; }), ["message", "message", "reply", "system", "message", "message"]);
   eq("bold/italic/links", m[0].text, "**Hello** _all_, see [the doc](https://example.com/x) and modar.me");

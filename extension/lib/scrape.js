@@ -5,6 +5,8 @@
  *   await WebexChatScraper.run({ includeDirect: true, onProgress: fn })
  *     -> { found: true, meeting, self, conversations: [{ name, kind, participant, messages: [...] }] }
  *     -> { found: false } in frames without the chat
+ * opts.myName, when set, is used as your name instead of reading the
+ * participants list.
  *
  * Every lookup walks open shadow roots too, so it doesn't matter where in the
  * component tree Webex puts the panel.
@@ -164,7 +166,8 @@
 
   /* What is on screen right now, without clicking or scrolling anything:
      the Everyone list and/or the open direct chat. Used by the live capture. */
-  function readVisible() {
+  function readVisible(opts) {
+    opts = opts || {};
     var out = [], everyone = $("#everyone-tabpanel"), direct = $("#direct-tabpanel");
     if (everyone && listItems(everyone).length) {
       out.push({ name: "Everyone", kind: "everyone", participant: "",
@@ -177,7 +180,7 @@
                    messages: WebexMerge.linkReplies(listItems(direct).map(parseMessage).filter(Boolean)) });
       }
     }
-    return { meeting: meetingName(), self: selfFromList(), conversations: out };
+    return { meeting: meetingName(), self: opts.skipSelf ? "" : selfFromList(), conversations: out };
   }
 
   // cheap fingerprint of the rendered lists, to skip parsing when nothing changed
@@ -258,8 +261,12 @@
       return { found: false };
     }
     var participantsOpen = !!$('[data-test="participant-list-item"]');
-    progress("Looking up your name…");
-    var self = await selfName();
+    // a name chosen in the options is used as is: no need to open the participants list
+    var self = (opts.myName || "").trim();
+    if (!self) {
+      progress("Looking up your name…");
+      self = await selfName();
+    }
     if (!(await ensureChatOpen())) return { found: false, error: "Could not open the chat panel." };
 
     var startedOn = $("#direct-tab[aria-selected='true']") ? "direct" : "everyone";

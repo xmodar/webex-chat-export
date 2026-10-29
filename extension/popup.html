@@ -15,6 +15,7 @@
   </fieldset>
 
   <label class="check"><input type="checkbox" id="includeDirect" checked> Include direct (private) chats</label>
+  <label class="check" id="tabCaptureRow" hidden><input type="checkbox" id="tabCapture"> Remind me to export if this meeting closes</label>
 
   <details>
     <summary>Options</summary>
@@ -31,6 +32,8 @@
         <option value="rtl">Right to left</option>
       </select>
     </label>
+    <label class="check"><input type="checkbox" id="autoCapture"> Remind me by default in new meetings</label>
+    <p class="hint">Keeps a copy of the chat on this computer while the meeting runs, so it can be exported if the tab closes first.</p>
   </details>
 
   <button id="export" type="button">Export chat…</button>
