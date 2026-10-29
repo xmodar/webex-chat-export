@@ -17,7 +17,7 @@
   <label class="check"><input type="checkbox" id="includeDirect" checked> Include direct (private) chats</label>
   <div id="tabCaptureRow" hidden>
     <label class="check"><input type="checkbox" id="tabCapture"> Remind me to export if this meeting closes</label>
-    <p class="hint warn">Keeps watching the chat during the meeting, which can make Webex slower or less responsive.</p>
+    <p class="hint warn">Also saves a copy of the chat on this computer during the meeting, which can make Webex slower or less responsive.</p>
   </div>
 
   <details>
@@ -36,12 +36,13 @@
       </select>
     </label>
     <label class="check"><input type="checkbox" id="autoCapture"> Turn on the close reminder in every new meeting</label>
-    <p class="hint">Off by default. While it is on, the extension watches the chat during meetings and keeps a copy on this computer, so it can still be exported if the tab closes first. Watching the chat can make Webex slower or less responsive, especially in long or busy meetings.</p>
+    <p class="hint">Off by default. While it is on, the extension also saves a copy of the chat on this computer during meetings, so it can still be exported if the tab closes first. That extra work can make Webex slower or less responsive, especially in long or busy meetings.</p>
   </details>
 
   <button id="export" type="button">Export chat…</button>
   <p id="status" role="status" aria-live="polite"></p>
   <p class="hint">Keep this tab on the meeting while it runs: the chat panel is scrolled and each direct chat is opened in turn. You'll be asked where to save the file.</p>
+  <p class="hint">Webex drops old messages from long chats, so the extension keeps every message it has seen in memory while the meeting page is open, and exports those too. Reloading the meeting page clears that memory.</p>
 
   <section id="unsaved" hidden>
     <h2>Not exported yet</h2>

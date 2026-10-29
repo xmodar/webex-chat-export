@@ -9,8 +9,12 @@ Webex Chat Export collects nothing and sends nothing anywhere.
   `*.webex.com`. It reads nothing on any other site.
 - **Where the data goes:** only into the file you export, saved where you
   choose.
+- **In memory:** while a meeting page is open, the extension keeps the chat
+  messages it has seen in that page's memory, so an export can include
+  messages Webex no longer shows. This is never written to disk and is
+  cleared when the page is reloaded or closed.
 - **What it stores:** only if you turn on the optional close reminder (off by
-  default), it keeps, while a meeting runs, a copy of the visible chat in
+  default), it keeps, while a meeting runs, a copy of the chat in
   the extension's local storage. This lets it offer an export if the
   meeting tab closes before you export. The copy never leaves your computer.
   It is deleted when you choose **Discard**, or 14 days after the meeting.

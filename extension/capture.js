@@ -1,22 +1,31 @@
 /*
- * Live capture for the close reminder. Only injected while the reminder is
- * on (see background.js); runs in the web.webex.com chat frame and hands new
- * chat messages to the background script. It never clicks or scrolls.
+ * Chat memory. Runs in the web.webex.com chat frame for the whole meeting.
+ *
+ * Webex drops old messages from a long chat: scrolling to the top no longer
+ * brings them back. So this keeps every message the chat shows, in memory,
+ * for as long as the meeting page is open, and the export adds them to what
+ * it reads (see WebexChatScraper.memory). Nothing is stored on disk. It never
+ * clicks or scrolls.
  *
  * Kept light on purpose: it watches only the side panel (not the whole
- * meeting UI), waits for changes to settle before reading, parses only
- * messages it hasn't sent yet, and sends just those.
+ * meeting UI), waits for changes to settle before reading, looks only in the
+ * normal DOM, and parses only messages it hasn't seen yet. Your name and the
+ * meeting title are read once.
+ *
+ * With the close reminder on, new messages are also sent to the background,
+ * which keeps a copy so the chat can be exported if the tab closes first.
  */
 /* global browser, WebexChatScraper */
 (function () {
   "use strict";
-  if (location.hostname !== "web.webex.com" || globalThis.__webexChatCapture) return;
-  globalThis.__webexChatCapture = true;
+  if (location.hostname !== "web.webex.com") return;
+  // a newer copy (extension updated, or injected into an open meeting) takes over; the memory stays
+  if (globalThis.__webexChatCapture) globalThis.__webexChatCapture.stop();
 
-  var SETTLE_MS = 2000, CHECK_MS = 10000;
+  var SETTLE_MS = 1000, CHECK_MS = 10000;
   var session = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  var state = { enabled: false, skipSelf: false };
-  var known = {}, haveMeeting = false, haveSelf = false;
+  var mem = WebexChatScraper.memory();
+  var remind = false, dead = false;
   var observer = null, watched = null, settle = null, check = null;
 
   function send(type, data) {
@@ -29,12 +38,11 @@
 
   function read() {
     settle = null;
-    if (!state.enabled) return;
-    var snap = WebexChatScraper.readVisible({ known: known, skipSelf: state.skipSelf || haveSelf, skipMeeting: haveMeeting });
-    snap.conversations.forEach(function (c) { c.messages.forEach(function (m) { known[m.id] = true; }); });
-    haveMeeting = haveMeeting || !!snap.meeting;
-    haveSelf = haveSelf || !!snap.self;
-    if (snap.conversations.length || snap.meeting || snap.self) send("capture", snap);
+    if (dead) return;
+    var snap = WebexChatScraper.readVisible({ known: mem.known, skipSelf: !!mem.self, skipMeeting: !!mem.meeting, shallow: true });
+    var named = (snap.self && !mem.self) || (snap.meeting && !mem.meeting);
+    if (!WebexChatScraper.remember(snap) && !named) return;
+    if (remind) send("capture", snap);
   }
 
   function changed() {
@@ -54,13 +62,8 @@
     }
   }
 
-  function start() {
-    if (check) return;
-    attach();
-    check = setInterval(attach, CHECK_MS);
-  }
-
   function stop() {
+    dead = true;
     clearInterval(check); check = null;
     clearTimeout(settle); settle = null;
     if (observer) observer.disconnect();
@@ -68,12 +71,21 @@
   }
 
   function apply(s) {
-    state = { enabled: !!(s && s.enabled), skipSelf: !!(s && s.skipSelf) };
-    if (state.enabled) start(); else { stop(); known = {}; haveMeeting = haveSelf = false; }
+    var on = !!(s && s.enabled);
+    // switched on mid-meeting: hand over everything kept so far
+    if (on && !remind && mem.conversations.length) {
+      send("capture", { meeting: mem.meeting, self: mem.self, conversations: mem.conversations });
+    }
+    remind = on;
+    return Promise.resolve(true);
   }
 
+  globalThis.__webexChatCapture = { stop: stop };
+  attach();
+  check = setInterval(attach, CHECK_MS);
+
   browser.runtime.onMessage.addListener(function (msg) {
-    if (msg && msg.type === "captureState") apply(msg);
+    if (!dead && msg && msg.type === "captureState") return apply(msg);
   });
   try {
     browser.runtime.sendMessage({ type: "captureState?" }).then(apply, function () {});
@@ -81,7 +93,7 @@
 
   // leaving the meeting tears this frame down; let the background know
   addEventListener("pagehide", function () {
-    if (!state.enabled) return;
+    if (dead || !remind) return;
     read();
     send("captureEnded");
   });

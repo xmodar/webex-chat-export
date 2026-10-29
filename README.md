@@ -12,14 +12,14 @@ What it does that the console script couldn't:
 | Direct (private) chats were missing. | Opens every conversation in **Direct → Recent Direct Messages** in turn and exports it. |
 | Markdown was flattened to plain text. | Converts the rendered HTML back into markdown: bold, italics, strike-through, links, inline code, code blocks with their language, headings, lists, block quotes and rules. Code is taken from the copy button, so the highlighter's line numbers are left out. |
 | Replies and quotes were lost. | Links each reply to its thread's first message, and splits each quote into who was quoted, the quoted text and the message it quotes. |
-| Only what was rendered was saved. | Scrolls each conversation to the top until no older messages load, then walks down, collecting messages as it goes. |
+| Only what was rendered was saved. | Scrolls each conversation to the top until no older messages load, then walks down, collecting messages as it goes. It also keeps every message the chat has shown in memory during the meeting, so messages Webex has dropped from a long chat are still exported (see [Chat memory](#chat-memory)). |
 
 It also keeps reactions and system lines (for example "X deleted their own
 message"), and opens the chat panel if it is closed. An optional reminder,
 off by default, offers to export the chat if you close the meeting tab
 without exporting (see [Reminder](#reminder-when-a-meeting-tab-closes)).
 
-When you aren't exporting, the extension runs nothing in your meetings.
+The extension never stores the chat on disk unless you turn the reminder on.
 
 ## Install
 
@@ -57,7 +57,26 @@ The first time, Firefox may ask to allow access to `webex.com`.
 Webex labels your own messages "You". The export replaces that with the name
 in **Show your messages as**. If that is empty, it reads your display name from
 the top entry of the participants list (the one marked "Me"), opening the
-participants panel briefly if it is closed.
+participants panel briefly if it is closed. It does this once per meeting,
+and not at all if the name was seen while the participants panel was open.
+
+### Chat memory
+
+In a long chat, Webex drops old messages: even when you scroll all the way
+up, they don't come back. So while the meeting page is open, the extension
+keeps every message the chat shows in memory, in the meeting page itself, and
+each export adds them to what it reads. Messages are kept in the order they
+were shown, with their replies and quotes.
+
+- It covers what the chat showed while the page was open: the Everyone list,
+  and the direct chats you opened (an export opens all of them, so they are
+  remembered from then on).
+- It is kept only in memory. Reloading or closing the meeting page clears it.
+  To keep a copy that survives a closed tab, turn on the
+  [reminder](#reminder-when-a-meeting-tab-closes).
+- It is cheap: it watches only the chat side panel, reads at most once a
+  second after a change, looks only in the page's normal DOM, and parses only
+  messages it hasn't seen yet. It never clicks or scrolls.
 
 Options in the popup (all optional):
 
@@ -72,20 +91,18 @@ Options in the popup (all optional):
 
 ### Reminder when a meeting tab closes
 
-**Optional, off by default.** Once a meeting tab is closed, its chat is gone.
-With the reminder on, the extension keeps a copy of what the chat panel shows
-while the meeting runs: the Everyone list, and any direct chat you have open.
-It doesn't click or scroll anything.
+**Optional, off by default.** Once a meeting tab is closed, its chat (and
+the [chat memory](#chat-memory)) is gone. With the reminder on, the extension
+also saves what the chat memory collects to the extension's storage on this
+computer while the meeting runs.
 
-> **It can make Webex slower.** Keeping the copy means watching the chat
-> panel for the whole meeting. On a slower computer, or in a long or busy
-> meeting, Webex can feel slower or less responsive. Turn it on only if you
-> need it.
+> **It can make Webex slower.** Saving the copy means sending every new
+> message out of the meeting page and writing it to storage for the whole
+> meeting. On a slower computer, or in a long or busy meeting, Webex can feel
+> slower or less responsive. Turn it on only if you need it.
 
-The extension keeps that work small. It watches only the side panel, waits
-for changes to settle, reads only messages it hasn't seen yet, and saves them
-in batches. While the reminder is off, none of this code is loaded into the
-meeting. With the reminder on, if the tab closes, you leave the meeting, or the
+The extension keeps that work small: it sends only new messages and saves
+them in batches every few seconds. With the reminder on, if the tab closes, you leave the meeting, or the
 browser quits while messages are still unexported, a window opens with the same format and
 options. From there you can **Export…**, choose **Not now** (the chat then
 appears under **Not exported yet** in the popup), or **Discard** it.
@@ -93,8 +110,10 @@ appears under **Not exported yet** in the popup), or **Discard** it.
 To turn it on for one meeting, use **Remind me to export if this meeting
 closes**, which the popup shows on a meeting tab. To turn it on for every new
 meeting, use **Turn on the close reminder in every new meeting** under
-Options. The per-meeting switch overrides the default for that meeting only. Switching it off stops the capture and deletes
-what was already captured for that meeting, so no reminder appears.
+Options. The per-meeting switch overrides the default for that meeting only.
+Switching it on mid-meeting saves everything the chat memory already has.
+Switching it off stops saving and deletes what was already saved for that
+meeting, so no reminder appears.
 
 What the reminder can export is what the chat panel showed while the meeting
 ran: direct chats you never opened aren't included. A normal export opens
@@ -180,7 +199,7 @@ the date, ids, a plain-text copy) or that only hold a default value.
 extension/              the extension source (loads unpacked in both browsers)
   manifest.json         Firefox and Chrome keys; tools/build.js splits them per browser
   background.js         runs exports (Save As), keeps the capture store, opens reminders
-  capture.js            reminder capture (only loaded while it is on): sends new chat messages to the background
+  capture.js            chat memory in the meeting page; with the reminder on, sends new messages to the background
   popup.*               the toolbar popup
   reminder.*            the "export the meeting chat?" window
   options.js            export options shared by the popup and the reminder

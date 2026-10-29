@@ -6,7 +6,12 @@
  *     -> { found: true, meeting, self, conversations: [{ name, kind, participant, messages: [...] }] }
  *     -> { found: false } in frames without the chat
  * opts.myName, when set, is used as your name instead of reading the
- * participants list.
+ * participants list. Otherwise the name is looked up once per meeting.
+ *
+ * Webex drops old messages from a long chat, so scrolling to the top doesn't
+ * bring them all back. The chat memory (memory(), filled by capture.js while
+ * the meeting page is open) keeps every message the chat has shown; run()
+ * adds what it reads to it and exports all of it.
  *
  * Every lookup walks open shadow roots too, so it doesn't matter where in the
  * component tree Webex puts the panel.
@@ -70,6 +75,24 @@
   }
 
   function text(el) { return el ? (el.textContent || "").replace(/\s+/g, " ").trim() : ""; }
+
+  /* ---------- chat memory ----------------------------------------------- */
+
+  // Lives in the frame for as long as the meeting page is open; injecting
+  // this file again keeps it.
+  function memory() {
+    return root.WebexChatMemory || (root.WebexChatMemory = { meeting: "", self: "", conversations: [], known: {} });
+  }
+
+  /* Adds a scrape result to the memory. Returns how many messages were new. */
+  function remember(result) {
+    var mem = memory(), fresh = 0;
+    WebexMerge.mergeResult(mem, result);
+    (result.conversations || []).forEach(function (c) {
+      c.messages.forEach(function (m) { if (!mem.known[m.id]) { mem.known[m.id] = true; fresh++; } });
+    });
+    return fresh;
+  }
 
   /* ---------- parsing one list item ------------------------------------ */
 
@@ -190,11 +213,13 @@
   /* What is on screen right now, without clicking or scrolling anything:
      the Everyone list and/or the open direct chat. Used by the live capture.
      opts.known ({ id: true }) limits the parsing to messages not sent before;
-     opts.skipSelf leaves the participants list alone; opts.skipMeeting the title. */
+     opts.skipSelf leaves the participants list alone; opts.skipMeeting the title;
+     opts.shallow looks only in the normal DOM, which is cheap enough to do often. */
   function readVisible(opts) {
     opts = opts || {};
-    var out = [], everyone = document.getElementById("everyone-tabpanel") || $("#everyone-tabpanel");
-    var direct = document.getElementById("direct-tabpanel") || $("#direct-tabpanel");
+    var out = [], deep = !opts.shallow;
+    var everyone = document.getElementById("everyone-tabpanel") || (deep && $("#everyone-tabpanel"));
+    var direct = document.getElementById("direct-tabpanel") || (deep && $("#direct-tabpanel"));
     function add(panel, conv) {
       var items = unseen(listItems(panel), opts.known);
       if (!items.length) return;
@@ -206,7 +231,8 @@
       var who = text(direct.querySelector(".direct-chat-header mdc-text"));
       if (who) add(direct, { name: "Direct: " + who, kind: "direct", participant: who });
     }
-    return { meeting: opts.skipMeeting ? "" : meetingName(), self: opts.skipSelf ? "" : selfFromList(), conversations: out };
+    return { meeting: opts.skipMeeting ? "" : meetingName(opts.shallow),
+             self: opts.skipSelf ? "" : selfFromList(opts.shallow), conversations: out };
   }
 
   /* ---------- driving the chat panel ----------------------------------- */
@@ -243,8 +269,9 @@
   // Your own display name: the participants list puts you first, tagged "Me".
   // The panel shares the side bar with the chat, so it is opened just long
   // enough to read it.
-  function selfFromList() {
-    var items = $$('[data-test="participant-list-item"]');
+  function selfFromList(shallow) {
+    var sel = '[data-test="participant-list-item"]';
+    var items = shallow ? Array.prototype.slice.call(document.querySelectorAll(sel)) : $$(sel);
     if (!items.length) return "";
     var me = items.filter(function (it) {
       var sub = it.querySelector('[id^="participant-secondary-text-"]');
@@ -266,8 +293,9 @@
     return name;
   }
 
-  function meetingName() {
-    var ed = $('#everyone-tabpanel .ql-editor[aria-label^="Write a message to "]');
+  function meetingName(shallow) {
+    var sel = '#everyone-tabpanel .ql-editor[aria-label^="Write a message to "]';
+    var ed = shallow ? document.querySelector(sel) : $(sel);
     return ed ? ed.getAttribute("aria-label").replace(/^Write a message to\s+/, "") : "";
   }
 
@@ -278,11 +306,13 @@
       return { found: false };
     }
     var participantsOpen = !!$('[data-test="participant-list-item"]');
-    // a name chosen in the options is used as is: no need to open the participants list
-    var self = (opts.myName || "").trim();
+    // a name chosen in the options is used as is: no need to open the participants list.
+    // Otherwise it is looked up once per meeting.
+    var mem = memory();
+    var self = (opts.myName || "").trim() || mem.self;
     if (!self) {
       progress("Looking up your name…");
-      self = await selfName();
+      self = mem.self = await selfName();
     }
     if (!(await ensureChatOpen())) return { found: false, error: "Could not open the chat panel." };
 
@@ -323,11 +353,19 @@
       var toggle = $('[data-test="participants-toggle-button"]');
       if (toggle) toggle.click(); // put the side bar back the way it was
     }
-    return { found: true, meeting: meeting, self: self, conversations: conversations };
+    // add what was read to the memory and export all of it: the memory also
+    // has the messages Webex no longer shows
+    remember({ meeting: meeting, conversations: conversations });
+    var all = mem.conversations.filter(function (c) {
+      return c.kind === "everyone" || opts.includeDirect !== false;
+    }).map(function (c) {
+      return { name: c.name, kind: c.kind, participant: c.participant, messages: c.messages };
+    });
+    return { found: true, meeting: meeting || mem.meeting, self: self, conversations: all };
   }
 
   root.WebexChatScraper = {
     run: run, parseMessage: parseMessage, readConversation: readConversation, selfFromList: selfFromList,
-    readVisible: readVisible
+    readVisible: readVisible, memory: memory, remember: remember
   };
 })(typeof globalThis !== "undefined" ? globalThis : this);

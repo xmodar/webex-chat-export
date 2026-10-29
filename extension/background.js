@@ -4,8 +4,9 @@
  * - Export: injects the scraper into every frame of the meeting tab, takes
  *   the answer from the frame that hosts the chat, builds the file and asks
  *   where to save it.
- * - Capture: capture.js sends what the chat shows every few seconds. It is
- *   merged into one record per meeting session, so that when the tab is
+ * - Close reminder (optional): capture.js keeps the chat in memory in the
+ *   meeting page; with the reminder on it also sends new messages here. They
+ *   are merged into one record per meeting session, so that when the tab is
  *   closed (or the browser quits) with messages that were never exported, a
  *   reminder window can offer to export them.
  */
@@ -89,31 +90,31 @@ function withCaptures(fn) {
 
 function unsaved(rec) { return WebexMerge.count(rec) > (rec.exportedCount || 0); }
 
-/* Capture on/off. It is off by default: watching the chat costs the meeting
-   page some work, which can make Webex slower on modest computers. New
+/* Close reminder on/off. capture.js always keeps the chat in memory in the
+   meeting page (so exports include messages Webex has dropped); only with
+   the reminder on does it also send them here to be stored. It is off by
+   default: storing a copy during the whole meeting costs extra work. New
    meetings follow the "autoCapture" option; the popup can switch it per tab,
    which wins until the tab closes. Switching a tab off also drops what was
-   captured there, so no reminder.
-
-   Nothing is injected into meetings while it is off: the capture scripts are
-   registered as content scripts only while the option is on, and injected
-   into a single tab when it is switched on there. */
+   stored for it, so no reminder. */
 var CAPTURE_FILES = ["vendor/browser-polyfill.min.js", "lib/markdown.js", "lib/merge.js", "lib/scrape.js", "capture.js"];
-var CAPTURE_SCRIPT = { id: "capture", matches: ["https://web.webex.com/*"], allFrames: true, runAt: "document_idle", js: CAPTURE_FILES };
 
 async function captureState(tabId) {
-  var o = await browser.storage.local.get({ autoCapture: false, myName: "" });
+  var o = await browser.storage.local.get({ autoCapture: false });
   var perTab = (await browser.storage.session.get("captureTabs")).captureTabs || {};
   var enabled = perTab[tabId] !== undefined ? perTab[tabId] : o.autoCapture;
-  return { type: "captureState", enabled: enabled, perTab: perTab[tabId] !== undefined, skipSelf: !!o.myName.trim() };
+  return { type: "captureState", enabled: enabled, perTab: perTab[tabId] !== undefined };
 }
 
-// keep the registered content script in line with the option
-async function syncRegistration() {
-  var on = (await browser.storage.local.get({ autoCapture: false })).autoCapture;
-  var have = (await browser.scripting.getRegisteredContentScripts({ ids: [CAPTURE_SCRIPT.id] })).length > 0;
-  if (on && !have) await browser.scripting.registerContentScripts([CAPTURE_SCRIPT]);
-  if (!on && have) await browser.scripting.unregisterContentScripts({ ids: [CAPTURE_SCRIPT.id] });
+// meetings that were already open when the extension was installed or updated
+async function injectOpenMeetings() {
+  // 1.3 registered the capture script itself; it is in the manifest now
+  var old = await browser.scripting.getRegisteredContentScripts({ ids: ["capture"] }).catch(function () { return []; });
+  if (old.length) await browser.scripting.unregisterContentScripts({ ids: ["capture"] }).catch(function () {});
+  var tabs = await browser.tabs.query({ url: "https://*.webex.com/*" });
+  tabs.forEach(function (t) {
+    browser.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: CAPTURE_FILES }).catch(function () {});
+  });
 }
 
 function dropTab(tabId) {
@@ -126,11 +127,12 @@ function dropTab(tabId) {
 async function pushState(tabId, inject) {
   var s = await captureState(tabId);
   if (!s.enabled) await dropTab(tabId);
-  else if (inject) {
-    // already-open meetings: the registered script only reaches pages loaded after it
+  // reaches every frame of the tab; capture.js answers
+  var heard = await browser.tabs.sendMessage(tabId, s).catch(function () { return false; });
+  if (!heard && inject && s.enabled) {
+    // no capture.js in this meeting yet (say, the extension was off when it opened)
     await browser.scripting.executeScript({ target: { tabId: tabId, allFrames: true }, files: CAPTURE_FILES }).catch(function () {});
   }
-  return browser.tabs.sendMessage(tabId, s).catch(function () {}); // reaches every frame of the tab
 }
 
 async function setTabCapture(tabId, enabled) {
@@ -216,9 +218,8 @@ async function runExport(tabId, opts) {
     status("running", "Choose where to save " + file.name + "…");
     if (!(await save(file))) return status("idle", "Export cancelled.");
 
-    // the full export also completes this meeting's capture, and marks it saved
-    await flush();
-    await withCaptures(function (all) {
+    // with the reminder on, the full export also completes this meeting's stored copy, and marks it saved
+    if ((await captureState(tabId)).enabled) await flush().then(function () { return withCaptures(function (all) {
       var rec = Object.keys(all).map(function (k) { return all[k]; })
         .filter(function (r) { return r.tabId === tabId; })
         .sort(function (a, b) { return b.updatedAt - a.updatedAt; })[0];
@@ -226,7 +227,7 @@ async function runExport(tabId, opts) {
       WebexMerge.mergeResult(rec, got);
       rec.updatedAt = Date.now();
       rec.exportedCount = WebexMerge.count(rec);
-    });
+    }); });
     status("done", summary(file, got));
   } catch (e) {
     status("error", String(e && e.message || e));
@@ -279,12 +280,11 @@ browser.runtime.onMessage.addListener(function (msg, sender) {
   }
 });
 
-// the default or the name changed: tell open meetings (those without their own switch)
+// the default changed: tell open meetings (those without their own switch)
 browser.storage.onChanged.addListener(function (changes, area) {
-  if (area !== "local" || !(changes.autoCapture || changes.myName)) return;
-  if (changes.autoCapture) syncRegistration();
+  if (area !== "local" || !changes.autoCapture) return;
   browser.tabs.query({ url: "https://*.webex.com/*" }).then(function (tabs) {
-    tabs.forEach(function (t) { pushState(t.id, !!changes.autoCapture); });
+    tabs.forEach(function (t) { pushState(t.id, false); });
   });
 });
 
@@ -299,5 +299,5 @@ browser.tabs.onRemoved.addListener(function (tabId) {
   });
 });
 
-browser.runtime.onStartup.addListener(function () { syncRegistration(); startup(); });
-browser.runtime.onInstalled.addListener(syncRegistration);
+browser.runtime.onStartup.addListener(startup);
+browser.runtime.onInstalled.addListener(injectOpenMeetings);

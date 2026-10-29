@@ -135,6 +135,28 @@
   eq("comma in name", m[5].user, "Lee, Jr.");
   eq("heading/ordered list/blockquote", m[5].text, "## Title\n\n1. a\n2. b\n\n> plain quote");
 
+  // the name is looked up once per meeting
+  items.forEach(function (el) { el.setAttribute("data-test", "participant-list-item-hidden"); });
+  eq("name remembered for the meeting", (await WebexChatScraper.run({ includeDirect: false })).self, "Dana Host");
+  items.forEach(function (el) { el.setAttribute("data-test", "participant-list-item"); });
+
+  // Webex drops old messages from long chats: the memory keeps them
+  var list = document.querySelector("mdc-list.activity-list-listcomponent");
+  var dropped = ["act-1", "act-2", "act-3"].map(function (id) { var el = document.getElementById(id); el.remove(); return el; });
+  var later = await WebexChatScraper.run({ includeDirect: false });
+  eq("dropped messages still exported", later.conversations[0].messages.map(function (x) { return x.id; }),
+     ["act-1", "act-2", "act-3", "act-4", "act-5", "act-6"]);
+  eq("reply link kept after its parent was dropped", later.conversations[0].messages[2].replyTo, "act-2");
+  var fresh = document.getElementById("act-6").cloneNode(true);
+  fresh.id = "act-7";
+  list.appendChild(fresh);
+  eq("live read remembers only new messages",
+     WebexChatScraper.remember(WebexChatScraper.readVisible({ known: WebexChatScraper.memory().known, shallow: true })), 1);
+  eq("new message lands at the end", WebexChatScraper.memory().conversations[0].messages.slice(-2).map(function (x) { return x.id; }),
+     ["act-6", "act-7"]);
+  fresh.remove();
+  dropped.reverse().forEach(function (el) { list.insertBefore(el, list.firstChild); });
+
   document.getElementById("results").textContent = lines.join("\n") + "\n\n" + (failed ? failed + " FAILED" : "all passed");
   document.getElementById("results").className = failed ? "fail" : "pass";
   window.testResult = { failed: failed, lines: lines };
