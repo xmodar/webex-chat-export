@@ -52,11 +52,11 @@ button:disabled { opacity: .6; cursor: progress; }
 .hint { margin: 0; color: var(--muted); font-size: 11.5px; }
 .hint.warn { margin: -2px 0 6px 22px; }
 .field select option { background: var(--bg); color: var(--fg); }
-h2 { font-size: 13px; margin: 14px 0 4px; }
-#unsavedList { margin: 0; padding-left: 18px; }
-#unsavedList a { color: var(--accent); }
+.saved { display: flex; align-items: center; gap: 10px; margin: 14px 0 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.saved span { flex: 1; }
+.saved button { width: auto; padding: 6px 12px; }
 
-/* reminder window */
+/* saved chats page */
 body.page { width: auto; max-width: 440px; margin: 0 auto; padding: 18px 20px; }
 .card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 10px 0 8px; }
 .card p { margin: 2px 0; }
@@ -64,6 +64,17 @@ body.page { width: auto; max-width: 440px; margin: 0 auto; padding: 18px 20px; }
 .meeting { font-weight: 600; }
 .muted { color: var(--muted); }
 .page .hint { margin-bottom: 12px; }
+body.manager { max-width: 760px; }
+.settings { margin-bottom: 4px; }
+.toolbar { display: flex; gap: 8px; margin: 8px 0 4px; }
+.toolbar input { flex: 1; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--fg); font: inherit; }
+.toolbar button { width: auto; padding: 6px 12px; }
+.chats { list-style: none; margin: 8px 0; padding: 0; }
+.chat-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.chat .convs { margin: 6px 0 4px; color: var(--muted); }
+.chat .row button { width: auto; padding: 6px 14px; }
+.badge { flex: none; font-size: 11.5px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.badge.ok { color: var(--ok); border-color: currentColor; }
 .row { display: flex; gap: 8px; margin-top: 8px; }
 button.secondary { background: transparent; color: var(--fg); border: 1px solid var(--line); font-weight: 500; }
 button.danger { color: var(--error); }

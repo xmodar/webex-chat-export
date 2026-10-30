@@ -1,17 +1,19 @@
 /*
  * Merging partial views of a chat into one ordered list.
  *
- * Webex may only render part of a conversation at a time, and the live
- * capture sees the chat in many snapshots, so messages arrive as windows of
- * the list. Each window is in display order; unknown ids are inserted after
- * the last known id that precedes them.
+ * Webex may only render part of a conversation at a time, and the chat is
+ * saved from many snapshots, so messages arrive as windows of the list. Each
+ * window is in display order; unknown ids are inserted after the last known
+ * id that precedes them, and a window with no known id goes at the end.
  */
 (function (root) {
   "use strict";
 
   /* order: [id], byId: {id: msg}, msgs: parsed messages in display order */
   function mergeOrdered(order, byId, msgs) {
-    var prev = -1;
+    // a window that shares no message with what we have came later (a new page in the same meeting)
+    var overlap = msgs.some(function (m) { return m && m.id && byId[m.id] !== undefined; });
+    var prev = overlap ? -1 : order.length - 1;
     msgs.forEach(function (m) {
       if (!m || !m.id) return;
       if (byId[m.id] !== undefined) {

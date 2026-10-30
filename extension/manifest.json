@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Webex Chat Export",
-  "version": "1.4.0",
+  "version": "2.0.0",
   "description": "Export a Webex meeting chat (Everyone and direct chats, with markdown, replies and quotes) to one Excel sheet or JSON.",
   "homepage_url": "https://github.com/xmodar/webex-chat-export",
   "browser_specific_settings": {
@@ -19,7 +19,8 @@
     "scripting",
     "downloads",
     "storage",
-    "activeTab"
+    "activeTab",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "*://*.webex.com/*"

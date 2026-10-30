@@ -20,14 +20,14 @@ Save the full chat of a Webex meeting you joined in the browser, in one click.
 • Replies linked to the message that started the thread; quotes linked to the message they quote
 • Reactions and system lines ("… deleted their own message") kept
 • Your own messages are shown with your name from the participants list instead of "You"; you can override it
-• Loads the whole history: it scrolls the chat to the top, then collects everything, and keeps every message it has seen in memory during the meeting, so messages Webex drops from long chats are still exported
+• Saves every meeting's chat on your computer as it goes, so messages Webex drops from long chats are still exported
 • Asks where to save the file
-• Optional reminder (off by default): if you close the meeting tab before exporting, it offers to export the chat it saw. It saves a copy of the chat during the meeting, so it can make Webex slower.
+• Saved chats page: search, export or delete any saved meeting chat, any time
 • Small files: compressed Excel and compact JSON
 
-How to use: join the meeting in your browser, click the toolbar button, pick Excel or JSON, and click Export.
+How to use: join the meeting in your browser, click the toolbar button, pick Excel or JSON, and click Export this meeting. To export later, open Saved chats.
 
-Privacy: everything stays on your computer. The extension collects nothing, sends nothing, and only runs on webex.com. The chat is stored on disk only if you turn the reminder on.
+Privacy: everything stays on your computer. The extension collects nothing, sends nothing, and only runs on webex.com. Saved chats stay on your computer until you delete them.
 
 Open source (MIT): https://github.com/xmodar/webex-chat-export
 
@@ -44,15 +44,15 @@ Export the chat of a Webex meeting open in the browser to an Excel or JSON file.
 
 ## Permission justifications (Chrome)
 
-- **scripting:** to run the chat reader in the Webex meeting tab when you click Export, and to start the chat memory in meetings that were already open when the extension was installed.
+- **scripting:** to run the chat reader in the Webex meeting tab when you click Export, and to start saving meetings that were already open when the extension was installed.
 - **downloads:** to save the exported file where you choose.
-- **storage:** to remember your export options and, only if the optional close reminder is on, to keep the chat seen during a meeting so it can be exported if the tab closes first.
+- **storage, unlimitedStorage:** to keep your export options and the saved meeting chats on this computer (long meetings add up), so they can be exported any time.
 - **activeTab:** to act on the meeting tab you exported from.
 - **Host permission `*://*.webex.com/*`:** the meeting chat lives in a `web.webex.com` frame inside the meeting page; the extension only reads it there.
 
 ## Data usage (Chrome privacy practices)
 
-- Data handled: **website content** (the chat messages) and **personal communications** (chat content and names), only to build the export file you request.
+- Data handled: **website content** (the chat messages) and **personal communications** (chat content and names), only to save the chat on this computer and build the export files you request.
 - Not sold, not transferred, not used for anything unrelated, not used for creditworthiness.
 - Remote code: **no**.
 

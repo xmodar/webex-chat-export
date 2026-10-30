@@ -6,12 +6,8 @@
  *     -> { found: true, meeting, self, conversations: [{ name, kind, participant, messages: [...] }] }
  *     -> { found: false } in frames without the chat
  * opts.myName, when set, is used as your name instead of reading the
- * participants list. Otherwise the name is looked up once per meeting.
- *
- * Webex drops old messages from a long chat, so scrolling to the top doesn't
- * bring them all back. The chat memory (memory(), filled by capture.js while
- * the meeting page is open) keeps every message the chat has shown; run()
- * adds what it reads to it and exports all of it.
+ * participants list (the background passes the name it already knows, so it
+ * is looked up once per meeting).
  *
  * Every lookup walks open shadow roots too, so it doesn't matter where in the
  * component tree Webex puts the panel.
@@ -75,24 +71,6 @@
   }
 
   function text(el) { return el ? (el.textContent || "").replace(/\s+/g, " ").trim() : ""; }
-
-  /* ---------- chat memory ----------------------------------------------- */
-
-  // Lives in the frame for as long as the meeting page is open; injecting
-  // this file again keeps it.
-  function memory() {
-    return root.WebexChatMemory || (root.WebexChatMemory = { meeting: "", self: "", conversations: [], known: {} });
-  }
-
-  /* Adds a scrape result to the memory. Returns how many messages were new. */
-  function remember(result) {
-    var mem = memory(), fresh = 0;
-    WebexMerge.mergeResult(mem, result);
-    (result.conversations || []).forEach(function (c) {
-      c.messages.forEach(function (m) { if (!mem.known[m.id]) { mem.known[m.id] = true; fresh++; } });
-    });
-    return fresh;
-  }
 
   /* ---------- parsing one list item ------------------------------------ */
 
@@ -306,13 +284,11 @@
       return { found: false };
     }
     var participantsOpen = !!$('[data-test="participant-list-item"]');
-    // a name chosen in the options is used as is: no need to open the participants list.
-    // Otherwise it is looked up once per meeting.
-    var mem = memory();
-    var self = (opts.myName || "").trim() || mem.self;
+    // a known name is used as is: no need to open the participants list
+    var self = (opts.myName || "").trim();
     if (!self) {
       progress("Looking up your name…");
-      self = mem.self = await selfName();
+      self = await selfName();
     }
     if (!(await ensureChatOpen())) return { found: false, error: "Could not open the chat panel." };
 
@@ -353,19 +329,11 @@
       var toggle = $('[data-test="participants-toggle-button"]');
       if (toggle) toggle.click(); // put the side bar back the way it was
     }
-    // add what was read to the memory and export all of it: the memory also
-    // has the messages Webex no longer shows
-    remember({ meeting: meeting, conversations: conversations });
-    var all = mem.conversations.filter(function (c) {
-      return c.kind === "everyone" || opts.includeDirect !== false;
-    }).map(function (c) {
-      return { name: c.name, kind: c.kind, participant: c.participant, messages: c.messages };
-    });
-    return { found: true, meeting: meeting || mem.meeting, self: self, conversations: all };
+    return { found: true, meeting: meeting, self: self, conversations: conversations };
   }
 
   root.WebexChatScraper = {
     run: run, parseMessage: parseMessage, readConversation: readConversation, selfFromList: selfFromList,
-    readVisible: readVisible, memory: memory, remember: remember
+    readVisible: readVisible
   };
 })(typeof globalThis !== "undefined" ? globalThis : this);

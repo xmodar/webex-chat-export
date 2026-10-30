@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Saved chats · Webex Chat Export</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body class="page manager">
+  <h1>Saved chats</h1>
+  <p class="hint">Every Webex meeting chat you join in this browser is saved here as it goes, on this computer only. Chats stay until you delete them.</p>
+
+  <div class="settings">
+    <fieldset class="format">
+      <legend>Format</legend>
+      <label><input type="radio" name="format" value="xlsx" checked> Excel (.xlsx)</label>
+      <label><input type="radio" name="format" value="json"> JSON</label>
+    </fieldset>
+    <label class="check"><input type="checkbox" id="includeDirect" checked> Include direct (private) chats</label>
+    <details>
+      <summary>Options</summary>
+      <label class="field">Show your messages as
+        <input type="text" id="myName" placeholder="your name from the participants list">
+      </label>
+      <label class="field">Time zone (for the date)
+        <input type="text" id="timezone">
+      </label>
+      <label class="field">Sheet direction
+        <select id="direction">
+          <option value="auto">Automatic (from the messages)</option>
+          <option value="ltr">Left to right</option>
+          <option value="rtl">Right to left</option>
+        </select>
+      </label>
+    </details>
+  </div>
+
+  <div class="toolbar">
+    <input type="search" id="filter" placeholder="Search meetings" aria-label="Search meetings">
+    <button id="deleteAll" type="button" class="secondary danger">Delete all…</button>
+  </div>
+  <p id="status" role="status" aria-live="polite"></p>
+
+  <ul id="list" class="chats"></ul>
+  <p id="empty" class="muted" hidden>No saved chats yet. Join a Webex meeting in this browser and its chat is saved here as it goes.</p>
+
+  <template id="row">
+    <li class="card chat">
+      <div class="chat-head">
+        <div>
+          <p class="meeting"></p>
+          <p class="muted when"></p>
+        </div>
+        <span class="badge"></span>
+      </div>
+      <ul class="convs"></ul>
+      <div class="row">
+        <button type="button" class="export">Export…</button>
+        <button type="button" class="secondary danger delete">Delete</button>
+      </div>
+    </li>
+  </template>
+
+  <script src="vendor/browser-polyfill.min.js"></script>
+  <script src="options.js"></script>
+  <script src="chats.js"></script>
+</body>
+</html>

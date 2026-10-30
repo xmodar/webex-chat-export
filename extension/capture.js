@@ -1,36 +1,31 @@
 /*
- * Chat memory. Runs in the web.webex.com chat frame for the whole meeting.
- *
- * Webex drops old messages from a long chat: scrolling to the top no longer
- * brings them back. So this keeps every message the chat shows, in memory,
- * for as long as the meeting page is open, and the export adds them to what
- * it reads (see WebexChatScraper.memory). Nothing is stored on disk. It never
+ * Saves the chat as the meeting goes. Runs in the web.webex.com chat frame
+ * of every meeting and sends the background the messages the chat shows,
+ * which keeps them in the meeting's saved chat. That way the saved chat has
+ * every message, even the ones Webex later drops from a long chat. It never
  * clicks or scrolls.
  *
  * Kept light on purpose: it watches only the side panel (not the whole
- * meeting UI), waits for changes to settle before reading, looks only in the
- * normal DOM, and parses only messages it hasn't seen yet. Your name and the
- * meeting title are read once.
- *
- * With the close reminder on, new messages are also sent to the background,
- * which keeps a copy so the chat can be exported if the tab closes first.
+ * meeting UI), reads at most once a second after a change, looks only in the
+ * normal DOM, and parses and sends only messages it hasn't sent yet. Your
+ * name and the meeting title are read once.
  */
 /* global browser, WebexChatScraper */
 (function () {
   "use strict";
   if (location.hostname !== "web.webex.com") return;
-  // a newer copy (extension updated, or injected into an open meeting) takes over; the memory stays
-  if (globalThis.__webexChatCapture) globalThis.__webexChatCapture.stop();
+  // a newer copy (extension updated, or injected into an open meeting) takes over
+  var prev = globalThis.__webexChatCapture;
+  if (prev) prev.stop();
 
   var SETTLE_MS = 1000, CHECK_MS = 10000;
-  var session = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  var mem = WebexChatScraper.memory();
-  var remind = false, dead = false;
-  var observer = null, watched = null, settle = null, check = null;
+  var page = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  var known = (prev && prev.known) || {}, meeting = (prev && prev.meeting) || "", self = (prev && prev.self) || "";
+  var dead = false, observer = null, watched = null, settle = null, check = null;
 
   function send(type, data) {
     try {
-      return browser.runtime.sendMessage({ type: type, session: session, data: data }).catch(function () {});
+      return browser.runtime.sendMessage({ type: type, page: page, data: data }).catch(function () {});
     } catch (e) {
       stop(); // extension reloaded or removed: this script is orphaned
     }
@@ -39,10 +34,17 @@
   function read() {
     settle = null;
     if (dead) return;
-    var snap = WebexChatScraper.readVisible({ known: mem.known, skipSelf: !!mem.self, skipMeeting: !!mem.meeting, shallow: true });
-    var named = (snap.self && !mem.self) || (snap.meeting && !mem.meeting);
-    if (!WebexChatScraper.remember(snap) && !named) return;
-    if (remind) send("capture", snap);
+    var snap = WebexChatScraper.readVisible({ known: known, skipSelf: !!self, skipMeeting: !!meeting, shallow: true });
+    var fresh = 0;
+    snap.conversations.forEach(function (c) {
+      c.messages.forEach(function (m) { if (!known[m.id]) { known[m.id] = true; fresh++; } });
+    });
+    var named = (snap.self && !self) || (snap.meeting && !meeting);
+    self = self || snap.self;
+    meeting = meeting || snap.meeting;
+    if (!fresh && !named) return;
+    snap.meeting = meeting; // every snapshot says which meeting it is from
+    send("capture", snap);
   }
 
   function changed() {
@@ -70,31 +72,26 @@
     watched = null;
   }
 
-  function apply(s) {
-    var on = !!(s && s.enabled);
-    // switched on mid-meeting: hand over everything kept so far
-    if (on && !remind && mem.conversations.length) {
-      send("capture", { meeting: mem.meeting, self: mem.self, conversations: mem.conversations });
-    }
-    remind = on;
-    return Promise.resolve(true);
+  globalThis.__webexChatCapture = {
+    stop: stop,
+    get known() { return known; }, get meeting() { return meeting; }, get self() { return self; }
+  };
+  // 1.4 kept the chat only in the page: hand it over to be saved
+  var mem = globalThis.WebexChatMemory;
+  if (mem && mem.conversations && mem.conversations.length) {
+    delete globalThis.WebexChatMemory;
+    meeting = meeting || mem.meeting || "";
+    self = self || mem.self || "";
+    mem.conversations.forEach(function (c) { c.messages.forEach(function (m) { known[m.id] = true; }); });
+    send("capture", { meeting: meeting, self: self, conversations: mem.conversations });
   }
-
-  globalThis.__webexChatCapture = { stop: stop };
   attach();
   check = setInterval(attach, CHECK_MS);
 
-  browser.runtime.onMessage.addListener(function (msg) {
-    if (!dead && msg && msg.type === "captureState") return apply(msg);
-  });
-  try {
-    browser.runtime.sendMessage({ type: "captureState?" }).then(apply, function () {});
-  } catch (e) { /* orphaned */ }
-
-  // leaving the meeting tears this frame down; let the background know
+  // leaving the meeting tears this frame down: send the last messages
   addEventListener("pagehide", function () {
-    if (dead || !remind) return;
+    if (dead) return;
     read();
-    send("captureEnded");
+    send("pageClosed");
   });
 })();

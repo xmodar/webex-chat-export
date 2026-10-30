@@ -81,16 +81,17 @@
 <section class="shot" id="s2">
   <div class="copy">
     <img src="/extension/icons/icon-128.png" alt="">
-    <h1>Closed the tab too soon? An optional reminder.</h1>
-    <p>Turn it on and the chat seen during the meeting is kept on your computer, so you can still export it.</p>
+    <h1>Every meeting saved. Export it any time.</h1>
+    <p>Each meeting’s chat is saved on your computer as it goes, even the messages Webex drops from long chats.</p>
     <ul class="points">
+      <li>Search, export or delete saved chats</li>
       <li>One sheet named after the date</li>
       <li>Small files: compressed Excel, compact JSON</li>
       <li>Nothing leaves your computer</li>
     </ul>
   </div>
   <div class="stage">
-    <div class="sheet" style="right: 150px;">
+    <div class="sheet" style="right: 260px; display: none;">
       <table>
         <colgroup><col style="width:62px"><col style="width:92px"><col><col style="width:104px"><col style="width:36px"><col style="width:58px"><col style="width:62px"></colgroup>
         <tr><th>timestamp</th><th>user</th><th>text</th><th>conversation</th><th>no</th><th>type</th><th>reply_to</th></tr>
@@ -107,7 +108,7 @@ print(np.__version__)
       </table>
       <div class="tab"><span>2026-10-28</span></div>
     </div>
-    <iframe class="frame" id="reminder" style="right: 0; top: 150px; width: 400px; height: 540px;"></iframe>
+    <iframe class="frame" id="chats" style="right: 40px; top: 40px; width: 600px; height: 720px;"></iframe>
   </div>
 </section>
 
@@ -122,13 +123,25 @@ print(np.__version__)
   document.getElementById("s" + shot).classList.add("on");
   fill("popup", "popup.html", function (h) {
     return h.replace('<p id="status" role="status" aria-live="polite"></p>',
-      '<p id="status" class="done">171 messages from 3 conversations saved as chat-2026-10-28.xlsx</p>');
+      '<p id="status" class="done">171 messages from 3 conversations saved as chat-2026-10-28.xlsx</p>')
+      .replace("No saved chats yet", "3 saved chats");
   });
-  fill("reminder", "reminder.html", function (h) {
-    return h.replace('<p class="meeting" id="meeting"></p>', '<p class="meeting" id="meeting">Intro to Machine Learning · Day 3</p>')
-      .replace('<p class="muted" id="when"></p>', '<p class="muted" id="when">28/10/2026, 10:00</p>')
-      .replace('<ul id="convs"></ul>', "<ul><li>Everyone · 164 messages</li><li>Direct: Nora S. · 7 messages</li></ul>")
-      .replace('<body class="page">', '<body class="page" style="padding:14px 18px">');
+  var row = function (title, when, badge, ok, convs) {
+    return '<li class="card chat"><div class="chat-head"><div><p class="meeting">' + title + '</p><p class="muted when">' + when +
+      '</p></div><span class="badge' + (ok ? " ok" : "") + '">' + badge + '</span></div><ul class="convs">' +
+      convs.map(function (c) { return "<li>" + c + "</li>"; }).join("") +
+      '</ul><div class="row"><button class="export">Export…</button><button class="secondary danger">Delete</button></div></li>';
+  };
+  fill("chats", "chats.html", function (h) {
+    return h.replace('<ul id="list" class="chats"></ul>', '<ul id="list" class="chats">' +
+        row("Intro to Machine Learning · Day 3", "Wed, Oct 28, 2026, 10:00–12:14 · 171 messages", "Not exported", false,
+            ["Everyone · 164 messages", "Direct: Nora S. · 7 messages"]) +
+        row("Intro to Machine Learning · Day 2", "Tue, Oct 27, 2026, 10:00–12:31 · 208 messages", "Exported", true,
+            ["Everyone · 199 messages", "Direct: Omar K. · 5 messages", "Direct: Lee Chen · 4 messages"]) +
+        row("Office hours", "Mon, Oct 26, 2026, 16:00–16:45 · 23 messages", "Exported", true, ["Everyone · 23 messages"]) +
+        "</ul>")
+      .replace(/<details>/, "<details hidden>")
+      .replace('<body class="page manager">', '<body class="page manager" style="padding:14px 18px">');
   });
 </script>
 </body>

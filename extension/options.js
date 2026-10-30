@@ -1,14 +1,12 @@
 /*
- * Export options shared by the popup and the reminder window: the same form
+ * Export options shared by the popup and the saved chats page: the same form
  * fields, stored in storage.local. Empty name / time zone mean "detect".
  */
 /* global browser */
 var ExportOptions = (function () {
   "use strict";
   var LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  // autoCapture: whether new meetings start with the capture (and close reminder) on.
-  // Off by default: watching the chat can make Webex slower.
-  var DEFAULTS = { format: "xlsx", includeDirect: true, myName: "", timezone: "", direction: "auto", autoCapture: false };
+  var DEFAULTS = { format: "xlsx", includeDirect: true, myName: "", timezone: "", direction: "auto" };
 
   function $(id) { return document.getElementById(id); }
 
@@ -25,12 +23,6 @@ var ExportOptions = (function () {
     $("timezone").value = o.timezone;
     $("timezone").placeholder = LOCAL_TZ;
     $("direction").value = o.direction;
-    // these two change what happens during meetings, so they are saved right away
-    if ($("autoCapture")) {
-      $("autoCapture").checked = o.autoCapture;
-      $("autoCapture").addEventListener("change", function () { browser.storage.local.set({ autoCapture: this.checked }); });
-    }
-    $("myName").addEventListener("change", function () { browser.storage.local.set({ myName: this.value.trim() }); });
     return o;
   }
 

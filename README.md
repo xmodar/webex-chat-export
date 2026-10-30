@@ -12,14 +12,12 @@ What it does that the console script couldn't:
 | Direct (private) chats were missing. | Opens every conversation in **Direct → Recent Direct Messages** in turn and exports it. |
 | Markdown was flattened to plain text. | Converts the rendered HTML back into markdown: bold, italics, strike-through, links, inline code, code blocks with their language, headings, lists, block quotes and rules. Code is taken from the copy button, so the highlighter's line numbers are left out. |
 | Replies and quotes were lost. | Links each reply to its thread's first message, and splits each quote into who was quoted, the quoted text and the message it quotes. |
-| Only what was rendered was saved. | Scrolls each conversation to the top until no older messages load, then walks down, collecting messages as it goes. It also keeps every message the chat has shown in memory during the meeting, so messages Webex has dropped from a long chat are still exported (see [Chat memory](#chat-memory)). |
+| Only what was rendered was saved. | Scrolls each conversation to the top until no older messages load, then walks down, collecting messages as it goes. It also saves every message as the meeting goes, so messages Webex later drops from a long chat are still exported (see [Saved chats](#saved-chats)). |
 
 It also keeps reactions and system lines (for example "X deleted their own
-message"), and opens the chat panel if it is closed. An optional reminder,
-off by default, offers to export the chat if you close the meeting tab
-without exporting (see [Reminder](#reminder-when-a-meeting-tab-closes)).
-
-The extension never stores the chat on disk unless you turn the reminder on.
+message"), and opens the chat panel if it is closed. Every meeting's chat is
+saved on your computer as it goes, so you can export it any time, even after
+the meeting has ended (see [Saved chats](#saved-chats)).
 
 ## Install
 
@@ -44,39 +42,50 @@ add-on already loaded.
 ## Use
 
 1. Join the meeting **in the browser**, in the web app on `*.webex.com`.
-2. Click the toolbar icon → choose **Excel** or **JSON** → **Export chat…**.
+2. Click the toolbar icon → choose **Excel** or **JSON** → **Export this meeting…**.
 3. Keep the meeting tab in front while the export runs. The extension scrolls
    the chat and opens each direct chat, then puts the chat back on the tab it
    was showing, scrolled back to where you were.
 4. Choose where to save the file. The suggested name is `chat-YYYY-MM-DD.xlsx`
-   or `.json`. If you cancel the dialog, nothing is saved and the chat still
-   counts as not exported.
+   or `.json`, with the meeting's date. If you cancel the dialog, nothing is
+   saved and the chat still counts as not exported.
+
+To export a meeting later, or one that has ended, use **Saved chats…** in the
+popup.
 
 The first time, Firefox may ask to allow access to `webex.com`.
 
 Webex labels your own messages "You". The export replaces that with the name
 in **Show your messages as**. If that is empty, it reads your display name from
 the top entry of the participants list (the one marked "Me"), opening the
-participants panel briefly if it is closed. It does this once per meeting,
-and not at all if the name was seen while the participants panel was open.
+participants panel briefly if it is closed. The name is kept with the
+meeting's saved chat, so it is looked up once per meeting, and not at all if
+it was seen while the participants panel was open.
 
-### Chat memory
+### Saved chats
 
 In a long chat, Webex drops old messages: even when you scroll all the way
-up, they don't come back. So while the meeting page is open, the extension
-keeps every message the chat shows in memory, in the meeting page itself, and
-each export adds them to what it reads. Messages are kept in the order they
-were shown, with their replies and quotes.
+up, they don't come back. So the extension saves the chat of every Webex
+meeting you join in the browser as the meeting goes, and an export includes
+everything that was saved. Messages are kept in the order they were shown,
+with their replies, quotes and reactions.
 
-- It covers what the chat showed while the page was open: the Everyone list,
-  and the direct chats you opened (an export opens all of them, so they are
-  remembered from then on).
-- It is kept only in memory. Reloading or closing the meeting page clears it.
-  To keep a copy that survives a closed tab, turn on the
-  [reminder](#reminder-when-a-meeting-tab-closes).
-- It is cheap: it watches only the chat side panel, reads at most once a
-  second after a change, looks only in the page's normal DOM, and parses only
-  messages it hasn't seen yet. It never clicks or scrolls.
+- **One saved chat per meeting,** named after the meeting, with the time it
+  started and the last message. Reloading the meeting page, or rejoining the
+  same meeting within three hours, goes on with the same saved chat.
+- **What it covers:** what the chat showed while the meeting page was open:
+  the Everyone list, and the direct chats you opened. **Export this
+  meeting…** reads the whole chat, every direct chat included, and adds it.
+- **Manage them** on the **Saved chats** page (popup → **Saved chats…**):
+  search by meeting name, see each chat's conversations and message counts
+  and whether it was exported, then **Export…** or **Delete** it, or
+  **Delete all…**. Exports use the format and options at the top of the page.
+- **Stays on this computer,** in the extension's storage, until you delete
+  it. Removing the extension deletes it too.
+- **Light on the meeting:** it watches only the chat side panel, reads at
+  most once a second after a change, looks only in the page's normal DOM,
+  parses only messages it hasn't seen yet, and writes them to storage in
+  batches every few seconds. It never clicks or scrolls.
 
 Options in the popup (all optional):
 
@@ -86,40 +95,6 @@ Options in the popup (all optional):
 - **Sheet direction:** automatic (right-to-left when most messages are in
   Arabic, Hebrew, Persian or Urdu), left-to-right, or right-to-left.
 - **Include direct (private) chats.**
-- **Turn on the close reminder in every new meeting:** off by default. See
-  below, including why it can slow Webex down.
-
-### Reminder when a meeting tab closes
-
-**Optional, off by default.** Once a meeting tab is closed, its chat (and
-the [chat memory](#chat-memory)) is gone. With the reminder on, the extension
-also saves what the chat memory collects to the extension's storage on this
-computer while the meeting runs.
-
-> **It can make Webex slower.** Saving the copy means sending every new
-> message out of the meeting page and writing it to storage for the whole
-> meeting. On a slower computer, or in a long or busy meeting, Webex can feel
-> slower or less responsive. Turn it on only if you need it.
-
-The extension keeps that work small: it sends only new messages and saves
-them in batches every few seconds. With the reminder on, if the tab closes, you leave the meeting, or the
-browser quits while messages are still unexported, a window opens with the same format and
-options. From there you can **Export…**, choose **Not now** (the chat then
-appears under **Not exported yet** in the popup), or **Discard** it.
-
-To turn it on for one meeting, use **Remind me to export if this meeting
-closes**, which the popup shows on a meeting tab. To turn it on for every new
-meeting, use **Turn on the close reminder in every new meeting** under
-Options. The per-meeting switch overrides the default for that meeting only.
-Switching it on mid-meeting saves everything the chat memory already has.
-Switching it off stops saving and deletes what was already saved for that
-meeting, so no reminder appears.
-
-What the reminder can export is what the chat panel showed while the meeting
-ran: direct chats you never opened aren't included. A normal export opens
-every direct chat, and it also marks the meeting as exported. Captured chats
-are kept only on this computer, in the extension's storage, and are deleted
-after 14 days.
 
 ## Output
 
@@ -183,9 +158,10 @@ the date, ids, a plain-text copy) or that only hold a default value.
 
 ## Limits
 
-- Webex only shows message times, not dates. A normal export uses the day you
-  export, so export on the day of the session. A chat exported from the
-  reminder uses the day the meeting was captured.
+- Webex only shows message times, not dates. The export uses the day the
+  meeting's saved chat started.
+- Messages Webex had already dropped before the extension saw the meeting
+  (for example, from before it was installed) can't be recovered.
 - A quote says who was quoted but not which message. `quote_of` is filled in
   only when one earlier message from that person has exactly the quoted text.
 - The extension reads the web app's markup (`data-test` attributes, the
@@ -198,11 +174,11 @@ the date, ids, a plain-text copy) or that only hold a default value.
 ```
 extension/              the extension source (loads unpacked in both browsers)
   manifest.json         Firefox and Chrome keys; tools/build.js splits them per browser
-  background.js         runs exports (Save As), keeps the capture store, opens reminders
-  capture.js            chat memory in the meeting page; with the reminder on, sends new messages to the background
+  background.js         keeps the saved chats, runs exports (Save As)
+  capture.js            in every meeting page: sends new chat messages to the background
   popup.*               the toolbar popup
-  reminder.*            the "export the meeting chat?" window
-  options.js            export options shared by the popup and the reminder
+  chats.*               the Saved chats page
+  options.js            export options shared by the popup and the Saved chats page
   lib/scrape.js         finds the chat, scrolls, opens direct chats, parses messages
   lib/markdown.js       rendered message HTML → markdown
   lib/merge.js          merges partial views of a chat in display order
@@ -216,13 +192,14 @@ tools/
   make-icons.js         draws the icons
 test/
   export.test.js        Node tests for the XLSX and JSON output and merging (npm test)
+  background.test.js    Node tests for the saved chats, with a fake browser API (npm test)
   scrape.test.html      browser tests for the scraper and markdown converter
 ```
 
 The extension uses the promise-based `browser.*` API everywhere.
 [webextension-polyfill](https://github.com/mozilla/webextension-polyfill)
-provides it in Chrome, and it does nothing in Firefox. The popup, the reminder,
-the background script and the content scripts all load it.
+provides it in Chrome, and it does nothing in Firefox. The popup, the Saved chats
+page, the background script and the content scripts all load it.
 
 **Capturing new snapshots of the Webex markup:** in the meeting tab, right-click
 a chat message → **Inspect**. In the Console, paste

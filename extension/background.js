@@ -1,14 +1,19 @@
 /*
- * Background: runs exports and keeps the live capture.
+ * Background: keeps the saved chats and runs exports.
  *
- * - Export: injects the scraper into every frame of the meeting tab, takes
- *   the answer from the frame that hosts the chat, builds the file and asks
- *   where to save it.
- * - Close reminder (optional): capture.js keeps the chat in memory in the
- *   meeting page; with the reminder on it also sends new messages here. They
- *   are merged into one record per meeting session, so that when the tab is
- *   closed (or the browser quits) with messages that were never exported, a
- *   reminder window can offer to export them.
+ * - Saving: capture.js, in every Webex meeting page, sends the chat messages
+ *   it sees. They are merged into one saved chat per meeting, in
+ *   storage.local on this computer, until the person deletes it. A page
+ *   reload in the same meeting goes on with the same saved chat.
+ * - Export of an open meeting: injects the scraper into every frame of the
+ *   tab, reads the whole chat (scrolling it, opening every direct chat), adds
+ *   it to the meeting's saved chat and exports that. The saved chat also has
+ *   the messages Webex has dropped from a long chat.
+ * - Export of a saved chat: from the "Saved chats" page, any time.
+ *
+ * Storage: "chat:<id>" holds one chat ({ id, meeting, self, startedAt,
+ * updatedAt, exportedAt, conversations }); "chatIndex" holds a short summary
+ * of each, so listing them doesn't read every message.
  */
 /* global browser, WebexExport, WebexMerge */
 // Chrome runs this as a service worker (no manifest script list), Firefox as an event page
@@ -17,12 +22,14 @@ if (typeof importScripts === "function") {
 }
 
 var busy = false;
-var KEEP_DAYS = 14;
+var SAME_MEETING_MS = 3 * 3600e3; // a reload this soon after, in a meeting of the same name, is the same meeting
+var FLUSH_MS = 5000;
+var CAPTURE_FILES = ["vendor/browser-polyfill.min.js", "lib/markdown.js", "lib/merge.js", "lib/scrape.js", "capture.js"];
 
 function status(state, text, extra) {
   var s = Object.assign({ state: state, text: text, at: Date.now() }, extra || {});
-  if (!s.session) browser.storage.session.set({ status: s });
-  browser.runtime.sendMessage({ type: "status", status: s }).catch(function () {}); // popup may be closed
+  if (!s.chat) browser.storage.session.set({ status: s });
+  browser.runtime.sendMessage({ type: "status", status: s }).catch(function () {}); // no page may be open
 }
 
 /* ---------- saving files ------------------------------------------------ */
@@ -64,93 +71,94 @@ async function save(file) {
   }
 }
 
-function build(result, opts) {
+function build(chat, opts) {
+  var result = {
+    meeting: chat.meeting, self: chat.self,
+    conversations: chat.conversations.filter(function (c) { return c.kind === "everyone" || opts.includeDirect !== false; })
+  };
+  opts = Object.assign({ when: chat.startedAt }, opts);
   return opts.format === "json" ? WebexExport.buildJsonFile(result, opts) : WebexExport.buildXlsxFile(result, opts);
 }
 
-function summary(file, result) {
-  var convs = result.conversations.filter(function (c) { return c.messages.length; }).length;
+function summary(file, chat) {
+  var convs = chat.conversations.filter(function (c) { return c.messages.length; }).length;
   return file.count + " messages from " + convs + " conversation" + (convs === 1 ? "" : "s") + " saved as " + file.name;
 }
 
-/* ---------- capture store ------------------------------------------------ */
+/* ---------- saved chats ------------------------------------------------- */
 
-// one read-modify-write at a time: capture messages arrive every few seconds
+// one change to the store at a time
 var queue = Promise.resolve();
-function withCaptures(fn) {
-  var run = queue.then(async function () {
-    var all = (await browser.storage.local.get("captures")).captures || {};
-    var out = await fn(all);
-    await browser.storage.local.set({ captures: all });
-    return out;
-  });
+function locked(fn) {
+  var run = queue.then(fn);
   queue = run.catch(function () {});
   return run;
 }
 
-function unsaved(rec) { return WebexMerge.count(rec) > (rec.exportedCount || 0); }
+function key(id) { return "chat:" + id; }
 
-/* Close reminder on/off. capture.js always keeps the chat in memory in the
-   meeting page (so exports include messages Webex has dropped); only with
-   the reminder on does it also send them here to be stored. It is off by
-   default: storing a copy during the whole meeting costs extra work. New
-   meetings follow the "autoCapture" option; the popup can switch it per tab,
-   which wins until the tab closes. Switching a tab off also drops what was
-   stored for it, so no reminder. */
-var CAPTURE_FILES = ["vendor/browser-polyfill.min.js", "lib/markdown.js", "lib/merge.js", "lib/scrape.js", "capture.js"];
+async function getIndex() { return (await browser.storage.local.get("chatIndex")).chatIndex || {}; }
 
-async function captureState(tabId) {
-  var o = await browser.storage.local.get({ autoCapture: false });
-  var perTab = (await browser.storage.session.get("captureTabs")).captureTabs || {};
-  var enabled = perTab[tabId] !== undefined ? perTab[tabId] : o.autoCapture;
-  return { type: "captureState", enabled: enabled, perTab: perTab[tabId] !== undefined };
+async function getChat(id) { return (await browser.storage.local.get(key(id)))[key(id)] || null; }
+
+function newChat(meeting) {
+  var now = Date.now();
+  return { id: now.toString(36) + Math.random().toString(36).slice(2, 6), meeting: meeting || "", self: "",
+           startedAt: now, updatedAt: now, exportedAt: 0, conversations: [] };
 }
 
-// meetings that were already open when the extension was installed or updated
-async function injectOpenMeetings() {
-  // 1.3 registered the capture script itself; it is in the manifest now
-  var old = await browser.scripting.getRegisteredContentScripts({ ids: ["capture"] }).catch(function () { return []; });
-  if (old.length) await browser.scripting.unregisterContentScripts({ ids: ["capture"] }).catch(function () {});
-  var tabs = await browser.tabs.query({ url: "https://*.webex.com/*" });
-  tabs.forEach(function (t) {
-    browser.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: CAPTURE_FILES }).catch(function () {});
-  });
+function entry(chat) {
+  return {
+    id: chat.id, meeting: chat.meeting, startedAt: chat.startedAt, updatedAt: chat.updatedAt, exportedAt: chat.exportedAt || 0,
+    count: WebexMerge.count(chat),
+    conversations: chat.conversations.map(function (c) { return { name: c.name, count: c.messages.length }; })
+  };
 }
 
-function dropTab(tabId) {
-  delete buffer[tabId];
-  return withCaptures(function (all) {
-    Object.keys(all).forEach(function (k) { if (all[k].tabId === tabId) delete all[k]; });
-  });
+// writes the chats and their index entries together
+async function store(chats) {
+  var index = await getIndex(), out = { chatIndex: index };
+  chats.forEach(function (c) { out[key(c.id)] = c; index[c.id] = entry(c); });
+  await browser.storage.local.set(out);
 }
 
-async function pushState(tabId, inject) {
-  var s = await captureState(tabId);
-  if (!s.enabled) await dropTab(tabId);
-  // reaches every frame of the tab; capture.js answers
-  var heard = await browser.tabs.sendMessage(tabId, s).catch(function () { return false; });
-  if (!heard && inject && s.enabled) {
-    // no capture.js in this meeting yet (say, the extension was off when it opened)
-    await browser.scripting.executeScript({ target: { tabId: tabId, allFrames: true }, files: CAPTURE_FILES }).catch(function () {});
+/* Which saved chat a meeting page belongs to. Pages (capture sessions) and
+   tabs are remembered in storage.session, which outlives a Chrome service
+   worker but not the browser. */
+async function links() {
+  var o = await browser.storage.session.get({ pages: {}, tabs: {} });
+  return { pages: o.pages, tabs: o.tabs };
+}
+
+async function chatFor(l, page, tabId, meeting) {
+  var id = (page && l.pages[page]) || null;
+  var chat = id && await getChat(id);
+  if (!chat && tabId != null && l.tabs[tabId]) {
+    // a reload of the same meeting in the same tab
+    var prev = await getChat(l.tabs[tabId]);
+    if (prev && (!meeting || !prev.meeting || prev.meeting === meeting) && Date.now() - prev.updatedAt < SAME_MEETING_MS) chat = prev;
   }
+  if (!chat && meeting) {
+    // the same meeting rejoined (another tab, or after a browser restart)
+    var index = await getIndex();
+    var hit = Object.keys(index).map(function (k) { return index[k]; }).filter(function (e) {
+      return e.meeting === meeting && Date.now() - e.updatedAt < SAME_MEETING_MS;
+    }).sort(function (a, b) { return b.updatedAt - a.updatedAt; })[0];
+    chat = hit && await getChat(hit.id);
+  }
+  if (!chat) chat = newChat(meeting);
+  if (page) l.pages[page] = chat.id;
+  if (tabId != null) l.tabs[tabId] = chat.id;
+  return chat;
 }
 
-async function setTabCapture(tabId, enabled) {
-  var perTab = (await browser.storage.session.get("captureTabs")).captureTabs || {};
-  perTab[tabId] = !!enabled;
-  await browser.storage.session.set({ captureTabs: perTab });
-  await pushState(tabId, true);
-  return captureState(tabId);
-}
+/* Messages from capture.js are buffered and written together every few
+   seconds, instead of rewriting the store on every message. */
+var buffer = {}, flushTimer = null;
 
-/* Captured messages are buffered and written together every few seconds,
-   instead of rewriting the store on every message. */
-var FLUSH_MS = 5000, buffer = {}, flushTimer = null;
-
-async function capture(session, tabId, snap) {
-  if (!(await captureState(tabId)).enabled) return; // switched off since this snapshot was taken
-  var b = buffer[tabId] || (buffer[tabId] = {});
-  (b[session] || (b[session] = [])).push(snap);
+function capture(page, tabId, snap) {
+  var b = buffer[page] || (buffer[page] = { tabId: tabId, snaps: [] });
+  b.snaps.push(snap);
   if (!flushTimer) flushTimer = setTimeout(flush, FLUSH_MS);
 }
 
@@ -160,32 +168,29 @@ function flush() {
   var pending = buffer;
   buffer = {};
   if (!Object.keys(pending).length) return queue;
-  return withCaptures(function (all) {
-    Object.keys(pending).forEach(function (tabId) {
-      Object.keys(pending[tabId]).forEach(function (session) {
-        var rec = all[session] || (all[session] = { session: session, tabId: +tabId, startedAt: Date.now(), conversations: [] });
-        pending[tabId][session].forEach(function (snap) { WebexMerge.mergeResult(rec, snap); });
-        rec.updatedAt = Date.now();
-      });
-    });
+  return locked(async function () {
+    var l = await links(), chats = {};
+    for (var page in pending) {
+      var p = pending[page];
+      var meeting = p.snaps.map(function (s) { return s.meeting; }).filter(Boolean)[0] || "";
+      var chat = await chatFor(l, page, p.tabId, meeting);
+      chat = chats[chat.id] || chat;
+      p.snaps.forEach(function (s) { WebexMerge.mergeResult(chat, s); });
+      chat.updatedAt = Date.now();
+      chats[chat.id] = chat;
+    }
+    await store(Object.keys(chats).map(function (k) { return chats[k]; }));
+    await browser.storage.session.set(l);
   });
 }
 
-async function openReminder(session) {
-  var url = browser.runtime.getURL("reminder.html?session=" + encodeURIComponent(session));
-  try {
-    await browser.windows.create({ url: url, type: "popup", width: 440, height: 600 });
-  } catch (e) {
-    await browser.tabs.create({ url: url });
-  }
-}
-
-function remind(match) {
-  return flush().then(function () { return withCaptures(function (all) {
-    var due = Object.keys(all).filter(function (k) { return match(all[k]) && !all[k].reminded && unsaved(all[k]); });
-    due.forEach(function (k) { all[k].reminded = true; });
-    return due;
-  }); }).then(function (due) { return Promise.all(due.map(openReminder)); });
+function deleteChats(ids) {
+  return flush().then(function () { return locked(async function () {
+    var index = await getIndex();
+    ids.forEach(function (id) { delete index[id]; });
+    await browser.storage.local.remove(ids.map(key));
+    await browser.storage.local.set({ chatIndex: index });
+  }); });
 }
 
 /* ---------- exports ------------------------------------------------------ */
@@ -195,13 +200,17 @@ async function runExport(tabId, opts) {
   busy = true;
   try {
     status("running", "Looking for the chat…");
+    await flush();
+    var l = await links();
+    var known = l.tabs[tabId] ? await getChat(l.tabs[tabId]) : null;
     var target = { tabId: tabId, allFrames: true };
     await browser.scripting.executeScript({
       target: target, files: ["vendor/browser-polyfill.min.js", "lib/markdown.js", "lib/merge.js", "lib/scrape.js"]
     });
     var results = await browser.scripting.executeScript({
       target: target,
-      args: [{ includeDirect: opts.includeDirect, myName: opts.myName || "" }],
+      // your name is looked up once per meeting: a saved chat already knows it
+      args: [{ includeDirect: opts.includeDirect, myName: opts.myName || (known && known.self) || "" }],
       func: function (o) {
         if (!globalThis.WebexChatScraper) return { found: false };
         o.onProgress = function (t) { browser.runtime.sendMessage({ type: "progress", text: t }).catch(function () {}); };
@@ -212,23 +221,18 @@ async function runExport(tabId, opts) {
     var hits = results.map(function (r) { return r.result; }).filter(function (r) { return r && r.found; });
     var got = hits.filter(function (r) { return !r.error; })[0];
     if (!got) throw new Error(hits.length ? hits[0].error : "No Webex meeting chat found in this tab. Join the meeting in the browser first.");
+    if (opts.myName) delete got.self; // a chosen name is not the detected one
 
-    var file = await build(got, opts);
-    if (!file.count) throw new Error("The chat has no messages yet.");
-    status("running", "Choose where to save " + file.name + "…");
-    if (!(await save(file))) return status("idle", "Export cancelled.");
-
-    // with the reminder on, the full export also completes this meeting's stored copy, and marks it saved
-    if ((await captureState(tabId)).enabled) await flush().then(function () { return withCaptures(function (all) {
-      var rec = Object.keys(all).map(function (k) { return all[k]; })
-        .filter(function (r) { return r.tabId === tabId; })
-        .sort(function (a, b) { return b.updatedAt - a.updatedAt; })[0];
-      if (!rec) rec = all["export-" + Date.now()] = { session: "export-" + Date.now(), tabId: tabId, startedAt: Date.now(), conversations: [] };
-      WebexMerge.mergeResult(rec, got);
-      rec.updatedAt = Date.now();
-      rec.exportedCount = WebexMerge.count(rec);
-    }); });
-    status("done", summary(file, got));
+    // add what was read to the meeting's saved chat, and export all of it
+    var chat = await locked(async function () {
+      var l2 = await links(), c = await chatFor(l2, null, tabId, got.meeting);
+      WebexMerge.mergeResult(c, got);
+      c.updatedAt = Date.now();
+      await store([c]);
+      await browser.storage.session.set(l2);
+      return c;
+    });
+    await exportChat(chat, opts);
   } catch (e) {
     status("error", String(e && e.message || e));
   } finally {
@@ -236,30 +240,55 @@ async function runExport(tabId, opts) {
   }
 }
 
-async function exportCapture(session, opts) {
-  try {
-    var rec = ((await browser.storage.local.get("captures")).captures || {})[session];
-    if (!rec) throw new Error("This chat is no longer stored.");
-    var file = await build(rec, Object.assign({ when: rec.startedAt }, opts));
-    if (!file.count) throw new Error("Nothing was captured from this chat.");
-    if (!(await save(file))) return status("idle", "Export cancelled.", { session: session });
-    await withCaptures(function (all) { if (all[session]) all[session].exportedCount = WebexMerge.count(all[session]); });
-    status("done", summary(file, rec), { session: session });
-  } catch (e) {
-    status("error", String(e && e.message || e), { session: session });
+/* Export a saved chat (an object, or its id). */
+async function exportChat(chat, opts, extra) {
+  if (typeof chat === "string") {
+    await flush();
+    chat = await getChat(chat);
+    if (!chat) throw new Error("This chat is no longer saved.");
   }
+  var file = await build(chat, opts);
+  if (!file.count) throw new Error("The chat has no messages yet.");
+  status("running", "Choose where to save " + file.name + "…", extra);
+  if (!(await save(file))) return status("idle", "Export cancelled.", extra);
+  await locked(async function () {
+    var c = await getChat(chat.id);
+    if (!c) return;
+    c.exportedAt = Date.now();
+    await store([c]);
+  });
+  status("done", summary(file, chat), extra);
 }
 
-function discard(session) {
-  return withCaptures(function (all) { delete all[session]; });
+function exportSaved(id, opts) {
+  var extra = { chat: id };
+  return exportChat(id, opts, extra).catch(function (e) { status("error", String(e && e.message || e), extra); });
 }
 
-// drop old records; offer the ones a browser quit left unsaved
-function startup() {
-  return withCaptures(function (all) {
-    var cutoff = Date.now() - KEEP_DAYS * 864e5;
-    Object.keys(all).forEach(function (k) { if ((all[k].updatedAt || 0) < cutoff) delete all[k]; });
-  }).then(function () { return remind(function () { return true; }); });
+/* ---------- install and update -------------------------------------------- */
+
+async function installed() {
+  // up to 1.4 there was a close reminder with its own store: keep its chats
+  var old = await browser.storage.local.get({ captures: null });
+  if (old.captures) {
+    await locked(function () {
+      return store(Object.keys(old.captures).map(function (k) {
+        var r = old.captures[k];
+        return { id: "c" + k, meeting: r.meeting || "", self: r.self || "", startedAt: r.startedAt || Date.now(),
+                 updatedAt: r.updatedAt || r.startedAt || Date.now(), exportedAt: r.exportedCount ? r.updatedAt || 1 : 0,
+                 conversations: r.conversations || [] };
+      }).filter(function (c) { return WebexMerge.count(c); }));
+    });
+  }
+  await browser.storage.local.remove(["captures", "autoCapture"]);
+  // 1.3 registered the capture script itself; it is in the manifest now
+  var reg = await browser.scripting.getRegisteredContentScripts({ ids: ["capture"] }).catch(function () { return []; });
+  if (reg.length) await browser.scripting.unregisterContentScripts({ ids: ["capture"] }).catch(function () {});
+  // meetings that were already open: start saving them now
+  var tabs = await browser.tabs.query({ url: "https://*.webex.com/*" });
+  tabs.forEach(function (t) {
+    browser.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: CAPTURE_FILES }).catch(function () {});
+  });
 }
 
 /* ---------- wiring --------------------------------------------------------- */
@@ -270,34 +299,21 @@ browser.runtime.onMessage.addListener(function (msg, sender) {
   switch (msg.type) {
     case "progress": status("running", msg.text); break;
     case "export": runExport(msg.tabId, msg.options || {}); break;
-    case "capture": if (tabId != null) capture(msg.session, tabId, msg.data); break;
-    case "captureEnded": remind(function (r) { return r.session === msg.session; }); break;
-    case "exportCapture": exportCapture(msg.session, msg.options || {}); break;
-    case "discardCapture": return discard(msg.session);
-    case "captureState?": if (tabId != null) return captureState(tabId); break;
-    case "getTabCapture": return captureState(msg.tabId);
-    case "setTabCapture": return setTabCapture(msg.tabId, msg.enabled);
+    case "capture": if (tabId != null) capture(msg.page, tabId, msg.data); break;
+    case "pageClosed": flush(); break;
+    case "exportChat": exportSaved(msg.id, msg.options || {}); break;
+    case "deleteChats": return deleteChats(msg.ids || []);
+    case "getChat": return flush().then(function () { return getChat(msg.id); });
   }
 });
 
-// the default changed: tell open meetings (those without their own switch)
-browser.storage.onChanged.addListener(function (changes, area) {
-  if (area !== "local" || !changes.autoCapture) return;
-  browser.tabs.query({ url: "https://*.webex.com/*" }).then(function (tabs) {
-    tabs.forEach(function (t) { pushState(t.id, false); });
-  });
-});
-
 browser.tabs.onRemoved.addListener(function (tabId) {
-  remind(function (r) { return r.tabId === tabId; }).then(function () {
-    return browser.storage.session.get("captureTabs");
-  }).then(function (o) {
-    var perTab = o.captureTabs || {};
-    if (perTab[tabId] === undefined) return;
-    delete perTab[tabId];
-    return browser.storage.session.set({ captureTabs: perTab });
-  });
+  flush().then(function () { return locked(async function () {
+    var l = await links();
+    if (l.tabs[tabId] === undefined) return;
+    delete l.tabs[tabId];
+    await browser.storage.session.set(l);
+  }); });
 });
 
-browser.runtime.onStartup.addListener(startup);
-browser.runtime.onInstalled.addListener(injectOpenMeetings);
+browser.runtime.onInstalled.addListener(installed);
